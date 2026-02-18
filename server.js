@@ -125,6 +125,65 @@ function getContextSophia(displayName, intent = null) {
     return { parts: [{ text: prompt }] };
 }
 
+// --- ADVANCED HELPERS (FROM CODE.GS) ---
+function normalizeIncidentId(raw) {
+    if (!raw) return raw;
+    let r = String(raw).toUpperCase().replace(/\s+/g, '');
+    if (r.startsWith('INC')) {
+        const digits = r.replace(/^INC/, '').replace(/\D/g, '');
+        return 'INC' + digits.padStart(12, '0');
+    }
+    const onlyDigits = r.replace(/\D/g, '');
+    if (onlyDigits.length > 0) {
+        return 'INC' + onlyDigits.padStart(12, '0');
+    }
+    return r;
+}
+
+function filtrarDatosRelevantes(jsonCompleto) {
+    if (jsonCompleto.Error) return jsonCompleto;
+    const mapeo = {
+        "Ticket ID": jsonCompleto["Incident Number"] || jsonCompleto["Entry ID"],
+        "Estatus": jsonCompleto["Status"],
+        "Razón Estatus": jsonCompleto["Status_Reason"],
+        "Prioridad": jsonCompleto["Priority"],
+        "Empresa": jsonCompleto["Company"],
+        "Resumen Corto": jsonCompleto["Description"],
+        "Descripción Detallada": jsonCompleto["Detailed Decription"] || jsonCompleto["Detailed Description"],
+        "Grupo Asignado": jsonCompleto["Assigned Group"],
+        "Asignado A": jsonCompleto["Assignee"],
+        "Resolución": jsonCompleto["Resolution"],
+        "Fecha Creación": jsonCompleto["Reported Date"]
+    };
+    Object.keys(mapeo).forEach(key => { if (!mapeo[key]) delete mapeo[key]; });
+    return mapeo;
+}
+
+async function generarResumenFinal(mensajeOriginal, datosJson, displayName) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${CFG.MODEL_ID}:generateContent?key=${CFG.GEMINI_API_KEY}`;
+    const promptFinal = `
+        CONTEXTO: El usuario preguntó "${mensajeOriginal}".
+        ACCIÓN: El sistema consultó la base de datos y obtuvo este registro JSON:
+        ${JSON.stringify(datosJson)}
+
+        INSTRUCCIÓN:
+        Como el asistente SOPHIA, explica estos datos al usuario en lenguaje natural, amable y profesional.
+        - Usa negritas en los campos clave.
+        - IMPORTANTE: NO muestres el JSON, solo el resumen legible.
+        - Dirígete al usuario por su nombre: ${displayName}.
+    `;
+    try {
+        const payload = {
+            system_instruction: { parts: [{ text: getCorePrompt(displayName) }] },
+            contents: [{ role: "user", parts: [{ text: promptFinal }] }]
+        };
+        const resp = await axios.post(url, payload);
+        return resp.data.candidates[0].content.parts[0].text;
+    } catch (e) {
+        return "No pude generar el resumen. Datos: " + JSON.stringify(datosJson);
+    }
+}
+
 // --- API ACTIONS ---
 async function loginBMC() {
     const resp = await axios.post(`${CFG.BMC_REST_URL}/api/jwt/login`,
@@ -163,11 +222,18 @@ app.post('/api/chat', async (req, res) => {
     const history = loadHistory(chatId);
 
     try {
-        // Basic intent detection (simple version for server)
-        const lower = message.toLowerCase();
-        let intent = null;
-        if (/inc|ticket|estatus|seguimiento/.test(lower)) intent = 'consulta';
-        if (/reset|contrase|bloque/.test(lower)) intent = 'reset';
+        // --- FAST TRACK: Detect direct ticket mention ---
+        const ticketMatch = message.match(/inc\s*0*\d+/i) || message.match(/\b\d{6,}\b/);
+        if (ticketMatch && !/reset|contrase|bloque/.test(lower)) {
+            console.log("[Chat] FAST TRACK detectado");
+            const normalized = normalizeIncidentId(ticketMatch[0]);
+            const rawData = await getIncidentData(normalized);
+            const cleanData = filtrarDatosRelevantes(rawData);
+            const summary = await generarResumenFinal(message, cleanData, displayName || "Usuario");
+            appendToHistory(chatId, "user", message);
+            appendToHistory(chatId, "model", summary);
+            return res.json({ tipo: "texto", respuesta: summary });
+        }
 
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${CFG.MODEL_ID}:generateContent?key=${CFG.GEMINI_API_KEY}`;
 
@@ -215,11 +281,13 @@ app.post('/api/chat', async (req, res) => {
         if (part.functionCall) {
             const { name, args } = part.functionCall;
             if (name === "consultar_estatus_ticket") {
-                const data = await getIncidentData(args.ticket_id);
-                const finalResponse = `Detalles del ticket: ${JSON.stringify(data)}`; // Simple version, should use a second Gemini call for natural language
+                const normalized = normalizeIncidentId(args.ticket_id);
+                const rawData = await getIncidentData(normalized);
+                const cleanData = filtrarDatosRelevantes(rawData);
+                const summary = await generarResumenFinal(message, cleanData, displayName || "Usuario");
                 appendToHistory(chatId, "user", message);
-                appendToHistory(chatId, "model", finalResponse);
-                return res.json({ tipo: "texto", respuesta: finalResponse });
+                appendToHistory(chatId, "model", summary);
+                return res.json({ tipo: "texto", respuesta: summary });
             }
 
             if (name === "reset_contrasena_um") {
