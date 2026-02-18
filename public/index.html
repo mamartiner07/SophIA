@@ -2133,7 +2133,7 @@
             }
 
             const langIso = detectLanguageFast(prepared);
-            const ttsLang = (langIso === 'en') ? 'en-us' : 'es-mx';
+            const ttsLang = (langIso === 'en') ? 'en-US' : 'es-MX';
 
             const sentences = prepared.split(/\n+/).filter(s => s.trim().length > 0);
             if (sentences.length === 0 && prepared.trim().length > 0) sentences.push(prepared);
