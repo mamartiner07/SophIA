@@ -178,6 +178,23 @@ app.post('/api/chat', async (req, res) => {
                     name: "consultar_estatus_ticket",
                     description: "Consulta el estado de un ticket.",
                     parameters: { type: "OBJECT", properties: { ticket_id: { type: "STRING" } }, required: ["ticket_id"] }
+                },
+                {
+                    name: "reset_contrasena_um",
+                    description: "Realiza el reseteo de contraseña vía sdAgentUM.",
+                    parameters: {
+                        type: "OBJECT",
+                        properties: {
+                            action: { type: "STRING" },
+                            employnumber: { type: "STRING" },
+                            mail: { type: "STRING" },
+                            placeBirth: { type: "STRING" },
+                            rfc: { type: "STRING" },
+                            sysapp: { type: "STRING" },
+                            user: { type: "STRING" }
+                        },
+                        required: ["action", "employnumber", "mail", "placeBirth", "rfc", "sysapp", "user"]
+                    }
                 }
             ]
         }];
@@ -203,6 +220,43 @@ app.post('/api/chat', async (req, res) => {
                 appendToHistory(chatId, "user", message);
                 appendToHistory(chatId, "model", finalResponse);
                 return res.json({ tipo: "texto", respuesta: finalResponse });
+            }
+
+            if (name === "reset_contrasena_um") {
+                // Security Validations
+                const email = (args.mail || "").toLowerCase().trim();
+                const isValidDomain = email.endsWith("@liverpool.com.mx") || email.endsWith("@suburbia.com.mx");
+                if (!isValidDomain) {
+                    const msg = "Lo siento, solo puedo procesar reseteos para correos con dominio **@liverpool.com.mx** o **@suburbia.com.mx**. Por favor, proporcióname un correo corporativo válido.";
+                    appendToHistory(chatId, "user", message);
+                    appendToHistory(chatId, "model", msg);
+                    return res.json({ tipo: "texto", respuesta: msg });
+                }
+
+                const rfc = (args.rfc || "").replace(/\s+/g, '');
+                if (rfc.length !== 13) {
+                    const msg = `El RFC proporcionado tiene ${rfc.length} caracteres. Recuerda que debe tener **exactamente 13 caracteres** para continuar. ¿Podrías proporcionarlo de nuevo?`;
+                    appendToHistory(chatId, "user", message);
+                    appendToHistory(chatId, "model", msg);
+                    return res.json({ tipo: "texto", respuesta: msg });
+                }
+
+                try {
+                    const resp = await axios.post(CFG.UM_RESET_URL, args, {
+                        headers: { Authorization: `Bearer ${CFG.UM_BEARER_TOKEN}`, Accept: 'application/json' }
+                    });
+                    const data = resp.data;
+                    const ticket = data.ticket || data.folio || data.incident || "Registrado";
+                    const finalResponse = `Reseteo solicitado con éxito. Folio: ${ticket}. La contraseña fue enviada al correo proporcionado.`;
+                    appendToHistory(chatId, "user", message);
+                    appendToHistory(chatId, "model", finalResponse);
+                    return res.json({ tipo: "texto", respuesta: finalResponse });
+                } catch (err) {
+                    const msgErr = "No pude completar el reseteo. Los datos no coinciden o el servicio no está disponible.";
+                    appendToHistory(chatId, "user", message);
+                    appendToHistory(chatId, "model", msgErr);
+                    return res.json({ tipo: "error", respuesta: msgErr });
+                }
             }
         }
 
