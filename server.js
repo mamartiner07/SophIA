@@ -198,11 +198,13 @@ app.post('/api/tts', async (req, res) => {
     };
 
     try {
+        console.log(`[TTS] Synthesizing: "${text.substring(0, 50)}..." Lang: ${lang}`);
         const resp = await axios.post(url, payload);
+        console.log(`[TTS] Success. Audio length: ${resp.data.audioContent.length}`);
         res.json({ audio: resp.data.audioContent, type: 'audio/mp3' });
     } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: e.message });
+        console.error("[TTS] Error:", e.response ? e.response.data : e.message);
+        res.status(500).json({ error: e.message, details: e.response ? e.response.data : null });
     }
 });
 
