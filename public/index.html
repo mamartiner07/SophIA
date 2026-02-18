@@ -2569,7 +2569,7 @@
                     speak("Hubo un error.");
                     unlockUI({ showQuickActions: false });
                 } else {
-                    let html = response.respuesta
+                    let html = (response.respuesta || "")
                         .replace(/\n/g, '<br>')
                         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
 
