@@ -220,6 +220,10 @@ app.post('/api/chat', async (req, res) => {
     if (!message || !chatId) return res.status(400).json({ error: "Missing data" });
 
     const history = loadHistory(chatId);
+    const lower = (message || "").toLowerCase();
+    let intent = null;
+    if (/inc|ticket|estatus|seguimiento/.test(lower)) intent = 'consulta';
+    if (/reset|restable|reinicio|contrase|bloque|um|sdagent/.test(lower)) intent = 'reset';
 
     try {
         // --- FAST TRACK: Detect direct ticket mention ---
@@ -335,7 +339,7 @@ app.post('/api/chat', async (req, res) => {
 
     } catch (e) {
         console.error(e);
-        res.status(500).json({ error: e.message });
+        res.status(500).json({ tipo: "error", respuesta: "Error en el servidor: " + e.message });
     }
 });
 
