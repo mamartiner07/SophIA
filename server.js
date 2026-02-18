@@ -189,7 +189,8 @@ app.post('/api/tts', async (req, res) => {
     const { text, lang } = req.body;
     if (!text) return res.status(400).json({ error: "Missing text" });
 
-    const url = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${CFG.GEMINI_API_KEY || CFG.GCLOUD_TTS_API_KEY}`;
+    const apiKey = CFG.GCLOUD_TTS_API_KEY || CFG.GEMINI_API_KEY;
+    const url = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`;
 
     const payload = {
         input: { text },
@@ -203,8 +204,9 @@ app.post('/api/tts', async (req, res) => {
         console.log(`[TTS] Success. Audio length: ${resp.data.audioContent.length}`);
         res.json({ audio: resp.data.audioContent, type: 'audio/mp3' });
     } catch (e) {
-        console.error("[TTS] Error:", e.response ? e.response.data : e.message);
-        res.status(500).json({ error: e.message, details: e.response ? e.response.data : null });
+        const errorData = e.response ? e.response.data : e.message;
+        console.error("[TTS] Error detail:", JSON.stringify(errorData));
+        res.status(500).json({ error: e.message, details: errorData });
     }
 });
 
