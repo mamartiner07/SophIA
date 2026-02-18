@@ -338,7 +338,10 @@ app.post('/api/chat', async (req, res) => {
         res.json({ tipo: "texto", respuesta: text });
 
     } catch (e) {
-        console.error(e);
+        console.error("Chat Error:", e.response?.status, e.message);
+        if (e.response?.status === 429) {
+            return res.json({ tipo: "error", respuesta: "¡Uy! Estoy recibiendo muchas peticiones en este momento. Por favor, espera unos segundos y vuelve a intentarlo." });
+        }
         res.status(500).json({ tipo: "error", respuesta: "Error en el servidor: " + e.message });
     }
 });
@@ -363,7 +366,12 @@ app.post('/api/tts', async (req, res) => {
         res.json({ audio: resp.data.audioContent, type: 'audio/mp3' });
     } catch (e) {
         const errorData = e.response ? e.response.data : e.message;
+        const status = e.response ? e.response.status : 500;
         console.error("[TTS] Error detail:", JSON.stringify(errorData));
+
+        if (status === 429) {
+            return res.status(429).json({ error: "Saturación en servicio de voz. Reintenta en un momento." });
+        }
         res.status(500).json({ error: e.message, details: errorData });
     }
 });
