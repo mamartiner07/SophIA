@@ -2837,9 +2837,7 @@
 
         })();
     </script>
-</body>
-
-</html>    <script>
+    <script>
         // --- NODE.JS BRIDGE ---
         const userEmail = "usuario@empresa.com";
         const userFullName = "Usuario Demo";
@@ -2847,15 +2845,15 @@
 
         async function callServer(methodName, ...args) {
             let endpoint = '/api/chat';
-            let body = { 
+            let body = {
                 method: methodName,
-                chatId: getChatId(), 
+                chatId: getChatId(),
                 displayName: typeof userFullName !== 'undefined' ? userFullName : "Usuario"
             };
 
             if (methodName === 'procesarMensaje') {
                 body.message = args[0];
-                body.chatId = args[1]; 
+                body.chatId = args[1];
             } else if (methodName === 'synthesizeSpeech') {
                 endpoint = '/api/tts';
                 body.text = args[0];
@@ -2870,3 +2868,6 @@
             return await resp.json();
         }
     </script>
+</body>
+
+</html>
