@@ -210,6 +210,13 @@ app.post('/api/tts', async (req, res) => {
     }
 });
 
+app.post('/api/clear', (req, res) => {
+    const { chatId } = req.body;
+    if (!chatId) return res.status(400).json({ error: "Missing chatId" });
+    messageHistory.delete(chatId);
+    res.json({ success: true, message: `History for ${chatId} cleared.` });
+});
+
 app.get('/api/config', (req, res) => {
     res.json({
         gcloudTtsKey: CFG.GCLOUD_TTS_API_KEY
