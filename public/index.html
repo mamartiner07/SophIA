@@ -1067,13 +1067,16 @@
     </style>
 
     <!-- Incluye tus logos (define window.LOGOS.SOPORTEC) -->
-    <?!= include('Logos'); ?>
+    <script src="logos.js"></script>
 </head>
 
 <body>
     <script>
-        const USER_FIRST_NAME = "<?= firstName ?>";
-        const USER_EMAIL = "<?= userEmail ?>";   // opcional
+        const USER_FIRST_NAME = "Usuario";
+        const USER_EMAIL = "usuario@empresa.com";
+        const userFullName = "Usuario Demo";
+        const userEmail = "usuario@empresa.com";
+        const firstName = "Usuario";
     </script>
 
     <!-- ===== START SCREEN ===== -->
@@ -1123,8 +1126,8 @@
                     </div>
                     <div id="user-email" class="user-email-panel">
                         <span class="status-dot"></span>
-                        <span>
-                            <?= userFullName || userEmail ?>
+                        <span id="user-display-name">
+                            Usuario Demo
                         </span>
                     </div>
                 </div>
@@ -2839,10 +2842,6 @@
     </script>
     <script>
         // --- NODE.JS BRIDGE ---
-        const userEmail = "usuario@empresa.com";
-        const userFullName = "Usuario Demo";
-        const firstName = "Usuario";
-
         async function callServer(methodName, ...args) {
             let endpoint = '/api/chat';
             let body = {
