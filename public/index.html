@@ -2510,18 +2510,8 @@
         // Al iniciar, limpia el cache del servidor para este chatId
         window.addEventListener('DOMContentLoaded', function () {
             const chatId = getChatId();
-            try {
-                google.script.run
-                    .withSuccessHandler(function () {
-                        // No llamamos a postWelcomeMessage aquí.
-                    })
-                    .withFailureHandler(function (e) {
-                        console.warn('No se pudo limpiar cache al cargar:', e);
-                    })
-                    .clearConversation(chatId);
-            } catch (e) {
-                console.warn('No se pudo limpiar cache al cargar (excepción):', e);
-            }
+            callServer('clearConversation', chatId)
+                .catch(e => console.warn('No se pudo limpiar cache al cargar:', e));
         });
 
 
@@ -2857,6 +2847,9 @@
                 endpoint = '/api/tts';
                 body.text = args[0];
                 body.lang = args[1];
+            } else if (methodName === 'clearConversation') {
+                endpoint = '/api/clear';
+                body.chatId = args[0];
             }
 
             const resp = await fetch(endpoint, {
