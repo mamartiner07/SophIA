@@ -1071,13 +1071,34 @@
 </head>
 
 <body>
-    <script>
-        const USER_FIRST_NAME = "Usuario";
-        const USER_EMAIL = "usuario@empresa.com";
-        const userFullName = "Usuario Demo";
-        const userEmail = "usuario@empresa.com";
-        const firstName = "Usuario";
-    </script>
+<script>
+    // Variables globales que Sophia usará
+    let userFullName = "Usuario"; 
+    let userEmail = "usuario@empresa.com";
+
+    // Función para traer los datos reales desde tu servidor Node.js
+    async function fetchProfile() {
+        try {
+            const res = await fetch('/api/user-profile');
+            const data = await res.json();
+            
+            // Actualizamos las variables globales
+            userFullName = data.displayName || "Usuario";
+            userEmail = data.email || "usuario@empresa.com";
+
+            // Actualizamos la interfaz visual (el chip de arriba a la derecha)
+            const displayElem = document.getElementById('user-display-name');
+            if (displayElem) displayElem.innerText = userFullName;
+            
+            console.log("Perfil actualizado correctamente:", userFullName);
+        } catch (e) {
+            console.error("No se pudo cargar el perfil:", e);
+        }
+    }
+
+    // Llamar a la carga de perfil nada más empezar
+    fetchProfile();
+</script>
 
     <!-- ===== START SCREEN ===== -->
     <div id="startScreen" class="start-screen" role="dialog" aria-modal="true">
@@ -2848,7 +2869,7 @@
             let body = {
                 method: methodName,
                 chatId: getChatId(),
-                displayName: typeof userFullName !== 'undefined' ? userFullName : "Usuario"
+                displayName: userFullName
             };
 
             if (methodName === 'procesarMensaje') {
