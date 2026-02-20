@@ -1072,32 +1072,30 @@
 
 <body>
 <script>
-    // Variables globales que Sophia usará
-    let userFullName = "Usuario"; 
-    let userEmail = "usuario@empresa.com";
+// --- BUSCA Y REEMPLAZA ESTA PARTE ---
+let userFullName = "Usuario"; // Valor por defecto
 
-    // Función para traer los datos reales desde tu servidor Node.js
-    async function fetchProfile() {
-        try {
-            const res = await fetch('/api/user-profile');
-            const data = await res.json();
+async function fetchGoogleProfile() {
+    try {
+        // Llamamos a tu API de Node.js que ya tiene la sesión de Google
+        const res = await fetch('/api/user-profile'); 
+        const data = await res.json();
+        
+        if (data.displayName) {
+            userFullName = data.displayName;
+            // Actualizamos el nombre en la interfaz (esquina superior derecha)
+            const nameElem = document.getElementById('user-display-name');
+            if (nameElem) nameElem.innerText = userFullName;
             
-            // Actualizamos las variables globales
-            userFullName = data.displayName || "Usuario";
-            userEmail = data.email || "usuario@empresa.com";
-
-            // Actualizamos la interfaz visual (el chip de arriba a la derecha)
-            const displayElem = document.getElementById('user-display-name');
-            if (displayElem) displayElem.innerText = userFullName;
-            
-            console.log("Perfil actualizado correctamente:", userFullName);
-        } catch (e) {
-            console.error("No se pudo cargar el perfil:", e);
+            console.log("Autenticado como:", userFullName);
         }
+    } catch (e) {
+        console.error("Error al obtener perfil de Google:", e);
     }
+}
 
-    // Llamar a la carga de perfil nada más empezar
-    fetchProfile();
+// Ejecutar al cargar la página
+fetchGoogleProfile();
 </script>
 
     <!-- ===== START SCREEN ===== -->
@@ -2502,7 +2500,7 @@
                 : "usuario";
 
             // Normalizar el saludo eliminando indentación de template literal
-            const saludoHtml = `Hola ${nombre}, soy Sophia, el asistente virtual de Soportec. Estoy aquí para agilizar tu día haciendo reinicios de contraseñas, desbloqueo de cuentas y consultando el estatus de tus tickets en tiempo real. ¿En que puedo ayudarte hoy?`;
+            const saludoHtml = `¡Hola ${firstName}! soy Sophia, el asistente virtual de Soportec. Estoy aquí para agilizar tu día haciendo reinicios de contraseñas, desbloqueo de cuentas y consultando el estatus de tus tickets en tiempo real. ¿En que puedo ayudarte hoy?`;
 
             lockUI({ hideQuickActions: true });
             const loader = document.getElementById('loading');
