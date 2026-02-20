@@ -10,12 +10,19 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// --- 1. CONFIGURACIÓN DE SESIÓN Y PASSPORT ---
-// Esto permite que el servidor "recuerde" al usuario tras el login
+// --- 1. PARCHE VITAL PARA CLOUD RUN ---
+// Esto permite que el servidor reconozca el HTTPS de Google Cloud
+app.set('trust proxy', 1);
+
+// --- 2. CONFIGURACIÓN DE SESIÓN ---
 app.use(session({ 
-    secret: 'sophia_secret_key_2024', // Puedes cambiar esto por una cadena aleatoria
+    secret: 'sophia_secret_key_2024',
     resave: false, 
-    saveUninitialized: false 
+    saveUninitialized: false,
+    cookie: {
+        secure: true, // Requerido por usar 'trust proxy'
+        sameSite: 'lax'
+    }
 }));
 
 app.use(passport.initialize());
@@ -24,14 +31,14 @@ app.use(passport.session());
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((user, done) => done(null, user));
 
-// Configuración de la Estrategia de Google
+// --- 3. CONFIGURACIÓN DE ESTRATEGIA CON PROXY ---
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: "/auth/google/callback"
+    callbackURL: "/auth/google/callback",
+    proxy: true // <--- SEGUNDO PARCHE VITAL: Obliga a usar la URL original
   },
   (accessToken, refreshToken, profile, done) => {
-    // FILTRO DE SEGURIDAD: Solo correos corporativos autorizados
     const email = profile.emails[0].value.toLowerCase();
     if (email.endsWith('@liverpool.com.mx') || email.endsWith('@suburbia.com.mx')) {
         return done(null, profile);
@@ -40,7 +47,7 @@ passport.use(new GoogleStrategy({
   }
 ));
 
-// --- 2. MIDDLEWARES DE PROTECCIÓN ---
+// --- MIDDLEWARES ---
 function isAuth(req, res, next) {
     if (req.isAuthenticated()) return next();
     res.redirect('/auth/google');
@@ -49,7 +56,7 @@ function isAuth(req, res, next) {
 app.use(cors());
 app.use(express.json());
 
-// --- 3. RUTAS DE AUTENTICACIÓN ---
+// --- RUTAS DE AUTENTICACIÓN ---
 app.get('/auth/google', passport.authenticate('google', { 
     scope: ['profile', 'email'],
     prompt: 'select_account' 
@@ -57,27 +64,21 @@ app.get('/auth/google', passport.authenticate('google', {
 
 app.get('/auth/google/callback', 
     passport.authenticate('google', { failureRedirect: '/auth/google' }),
-    (req, res) => {
-        res.redirect('/'); // Al tener éxito, va a la raíz
-    }
+    (req, res) => res.redirect('/')
 );
 
 app.get('/logout', (req, res) => {
-    req.logout(() => {
-        res.redirect('https://accounts.google.com/Logout'); 
-    });
+    req.logout(() => res.redirect('/'));
 });
 
-// --- 4. SERVIR FRONTEND PROTEGIDO ---
-// Solo usuarios logueados pueden ver el index.html
+// --- SERVIR FRONTEND ---
 app.get('/', isAuth, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// El resto de la carpeta public (css, js, imagenes)
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- 5. CONFIGURATION DE SOPHIA ---
+// --- CONFIGURATION DE SOPHIA ---
 const CFG = {
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
     MODEL_ID: process.env.MODEL_ID || "gemini-1.5-flash",
@@ -92,18 +93,12 @@ const CFG = {
 const messageHistory = new Map();
 const MAX_TURNS = 12;
 
-// --- HELPERS ---
-function loadHistory(chatId) {
-    return messageHistory.get(chatId) || [];
-}
-
+// --- HELPERS (ESTÁNDAR) ---
+function loadHistory(chatId) { return messageHistory.get(chatId) || []; }
 function saveHistory(chatId, history) {
-    if (history.length > MAX_TURNS) {
-        history = history.slice(history.length - MAX_TURNS);
-    }
+    if (history.length > MAX_TURNS) history = history.slice(history.length - MAX_TURNS);
     messageHistory.set(chatId, history);
 }
-
 function appendToHistory(chatId, role, text) {
     const history = loadHistory(chatId);
     history.push({ role, parts: [{ text }] });
