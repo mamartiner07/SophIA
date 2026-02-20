@@ -1184,6 +1184,17 @@
 
 
     <script>
+        // Al inicio de tu script de frontend
+        let currentUser = "Usuario Demo";
+        
+        async function fetchProfile() {
+            const res = await fetch('/api/user-profile');
+            const data = await res.json();
+            currentUser = data.displayName;
+            document.getElementById('user-name-display').innerText = currentUser; // Si tienes un elemento para el nombre
+        }
+        
+        fetchProfile();
         // --- VARIABLES GLOBALES ---
         let recognition = null;
         let isListening = false;
