@@ -230,6 +230,29 @@ async function getIncidentData(incidentNumber) {
     } catch (e) { return { Error: e.message }; }
 }
 
+app.post('/api/tts', async (req, res) => {
+    try {
+        const { text, lang } = req.body;
+        const url = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${CFG.GCLOUD_TTS_API_KEY}`;
+        const payload = {
+            input: { text },
+            voice: { languageCode: lang || 'es-MX', ssmlGender: 'FEMALE' },
+            audioConfig: { audioEncoding: 'MP3' }
+        }; 
+        const resp = await axios.post(url, payload);
+        res.json({ audio: resp.data.audioContent, type: 'audio/mp3' });
+    } catch (error) {
+        console.error("Error en TTS:", error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/clear', (req, res) => {
+    const { chatId } = req.body;
+    messageHistory.delete(chatId);
+    res.json({ status: "ok", message: "Historial limpiado" });
+});
+
 // --- API CHAT ---
 app.post('/api/chat', isAuth, async (req, res) => {
     const { message, chatId, displayName } = req.body;
@@ -250,10 +273,8 @@ app.post('/api/chat', isAuth, async (req, res) => {
 
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${CFG.MODEL_ID}:generateContent?key=${CFG.GEMINI_API_KEY}`;
         const payload = {
-            // Ahora solo pasamos el displayName, la función se encarga del resto
             system_instruction: getContextSophia(displayName || "Usuario"),
-            contents,
-            tools,
+            contents: history.concat([{ role: "user", parts: [{ text: message }] }]),
             safetySettings: [
                 { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
                 { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -272,14 +293,3 @@ app.post('/api/chat', isAuth, async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`SophIA Server running on port ${PORT}`));
-
-app.post('/api/clear', (req, res) => {
-    const { chatId } = req.body;
-    
-    // Limpia la conversación del caché (ejemplo con Map)
-    if (conversationCache && conversationCache.has(chatId)) {
-        conversationCache.delete(chatId);
-    }
-    
-    res.json({ success: true, message: 'Caché limpiado' });
-});
