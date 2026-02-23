@@ -2869,6 +2869,13 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             });
+
+            if (resp.status === 401) {
+                console.warn("Sesión expirada. Redirigiendo...");
+                window.location.reload();
+                return { tipo: "error", respuesta: "Tu sesión ha expirado, recargando..." };
+            }
+
             return await resp.json();
         }
     </script>
