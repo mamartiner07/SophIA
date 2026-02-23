@@ -12,9 +12,9 @@ const PORT = process.env.PORT || 8080;
 
 app.set('trust proxy', 1);
 
-app.use(session({ 
+app.use(session({
     secret: 'sophia_secret_key_2024',
-    resave: false, 
+    resave: false,
     saveUninitialized: false,
     cookie: { secure: true, sameSite: 'lax' }
 }));
@@ -29,15 +29,15 @@ passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     callbackURL: "/auth/google/callback",
-    proxy: true 
-  },
-  (accessToken, refreshToken, profile, done) => {
-    const email = profile.emails[0].value.toLowerCase();
-    if (email.endsWith('@liverpool.com.mx') || email.endsWith('@suburbia.com.mx')) {
-        return done(null, profile);
+    proxy: true
+},
+    (accessToken, refreshToken, profile, done) => {
+        const email = profile.emails[0].value.toLowerCase();
+        if (email.endsWith('@liverpool.com.mx') || email.endsWith('@suburbia.com.mx')) {
+            return done(null, profile);
+        }
+        return done(null, false, { message: 'Dominio no autorizado' });
     }
-    return done(null, false, { message: 'Dominio no autorizado' });
-  }
 ));
 
 function isAuth(req, res, next) {
@@ -54,17 +54,17 @@ app.get('/api/user-profile', isAuth, async (req, res) => {
         const email = req.user.emails[0].value;
         const jwt = await loginBMC();
         const headers = { Authorization: `AR-JWT ${jwt}`, Accept: 'application/json' };
-        
+
         // Consulta a CTM:People por correo electrónico
         const qualification = `'Internet E-mail'="${email}"`;
         const url = `${CFG.BMC_REST_URL}/api/arsys/v1/entry/CTM:People?q=${encodeURIComponent(qualification)}`;
-        
+
         const response = await axios.get(url, { headers });
         const personData = response.data.entries[0]?.values;
 
         // Extraemos el nombre o usamos el nombre de Google como respaldo
         const firstName = personData ? personData['First Name'] : req.user.name.givenName;
-        
+
         res.json({
             displayName: firstName,
             email: email,
@@ -193,16 +193,16 @@ function filtrarDatosRelevantes(jsonCompleto) {
 
 async function generarResumenFinal(mensajeOriginal, datosJson, displayName) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${CFG.MODEL_ID}:generateContent?key=${CFG.GEMINI_API_KEY}`;
-    
+
     // Usamos el mismo prompt de sistema para que no pierda la personalidad de SOPHIA
     const payload = {
         system_instruction: getContextSophia(displayName),
-        contents: [{ 
-            role: "user", 
-            parts: [{ text: `CONTEXTO: El usuario preguntó "${mensajeOriginal}". Registro JSON obtenido: ${JSON.stringify(datosJson)}. Genera el resumen siguiendo tus reglas de formato.` }] 
+        contents: [{
+            role: "user",
+            parts: [{ text: `CONTEXTO: El usuario preguntó "${mensajeOriginal}". Registro JSON obtenido: ${JSON.stringify(datosJson)}. Genera el resumen siguiendo tus reglas de formato.` }]
         }]
     };
-    
+
     try {
         const resp = await axios.post(url, payload);
         return resp.data.candidates[0].content.parts[0].text;
@@ -251,7 +251,7 @@ app.post('/api/chat', isAuth, async (req, res) => {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${CFG.MODEL_ID}:generateContent?key=${CFG.GEMINI_API_KEY}`;
         const payload = {
             // Ahora solo pasamos el displayName, la función se encarga del resto
-            system_instruction: getContextSophia(displayName || "Usuario"), 
+            system_instruction: getContextSophia(displayName || "Usuario"),
             contents,
             tools,
             safetySettings: [
@@ -264,7 +264,7 @@ app.post('/api/chat', isAuth, async (req, res) => {
 
         const geminiResp = await axios.post(url, payload);
         const text = geminiResp.data.candidates[0].content.parts[0].text;
-        
+
         appendToHistory(chatId, "user", message);
         appendToHistory(chatId, "model", text);
         res.json({ tipo: "texto", respuesta: text });
@@ -272,3 +272,14 @@ app.post('/api/chat', isAuth, async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`SophIA Server running on port ${PORT}`));
+
+app.post('/api/clear', (req, res) => {
+    const { chatId } = req.body;
+    
+    // Limpia la conversación del caché (ejemplo con Map)
+    if (conversationCache && conversationCache.has(chatId)) {
+        conversationCache.delete(chatId);
+    }
+    
+    res.json({ success: true, message: 'Caché limpiado' });
+});
