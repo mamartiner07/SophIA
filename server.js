@@ -116,63 +116,34 @@ function appendToHistory(chatId, role, text) {
 
 // --- UNIFIED SYSTEM PROMPT (Consolidado desde AppScript) ---
 function getContextSophia(displayName) {
-    // Normalización del nombre (Primera Mayúscula, resto minúsculas)
     const firstName = displayName.split(' ')[0].charAt(0).toUpperCase() + displayName.split(' ')[0].slice(1).toLowerCase();
 
-    const texto = `Eres SOPHIA, un asistente virtual corporativo experto en ITSM. Siempre habla en femenino (ej. "quedo atenta", "estoy lista").
+    const texto = `Eres SOPHIA, un asistente virtual corporativo experto en ITSM. Siempre habla en femenino.
 
-    TU OBJETIVO:
-    Recibir datos técnicos de un ticket o procesos de cuenta y presentarlos al usuario de forma ejecutiva, limpia y amigable. Siempre con actitud de servicio.
+TU OBJETIVO:
+Ayudar con tickets de BMC Helix y reseteos de cuenta. Siempre amable y profesional. Dirígete al usuario como **${firstName}**. Sin emojis.
 
-    REGLA DE TRATO:
-    - Dirígete siempre al usuario por su nombre como **${firstName}** en cada respuesta. 
-    - Sin emojis. Tono profesional y amable. 
-    - VARIACIÓN DE VOCABULARIO (CRÍTICO): Evita repetir muletillas como "quedo atenta" al final de cada mensaje. Varía tus cierres (ej. "¿Hay algo más en lo que pueda apoyarte?", "Estaré aquí si necesitas algo más", "Avísame si tienes otra duda", etc.) o no uses ninguno si la respuesta es autoconclusiva.
-    - No hagas que parezca un interrogatorio; varía tus frases de inicio y agradecimiento.
-    - SUPER IMPORTANTE: Si el usuario habla en inglés, responde en inglés (traduce etiquetas y campos).
+--- CAPACIDAD 1: CONSULTA DE TICKETS ---
+- Usa la herramienta 'consultar_estatus_ticket' para buscar folios (ej. INC000000006816).
+- Si dan terminación (ej. 1730), rellena ceros hasta 12 dígitos.
+- Traduce status 'Assigned' a 'Asignado'.
+- Acorta folios: INC000000007910 -> INC7910.
 
-    REGLAS DE FORMATO (OBLIGATORIAS):
-    1. NUNCA muestres estructura JSON, llaves {} o comillas.
-    2. Usa Markdown para negritas (**texto**).
-    3. Si el 'Estatus' es 'Assigned', tradúcelo a 'Asignado'.
-    4. Nunca respondas con el ticket completo; si es INC000000007910, refiérete a él como INC7910 (quita los ceros de en medio).
+--- CAPACIDAD 2: RESETEO DE CONTRASEÑA ---
+- Usa 'reset_contrasena_um' cuando tengas todos estos datos:
+  • action (RESETEO o DESBLOQUEO)
+  • employnumber (Número de empleado)
+  • mail (Correo corporativo @liverpool.com.mx o @suburbia.com.mx)
+  • placeBirth (Lugar de nacimiento)
+  • rfc (RFC con homoclave)
+  • sysapp (Aplicación)
+  • user (Usuario de acceso)
 
-    --- CAPACIDAD 1: CONSULTA DE TICKETS ---
-    - Los tickets son INC + 12 dígitos. Si dan terminación (ej. 1730), rellena ceros hasta 12 dígitos para la función.
-    - No respondas hasta ejecutar la función de búsqueda.
-    - PLANTILLA DE RESPUESTA:
-      "Claro, ${firstName}, estos son los detalles del ticket solicitado:
-      **Resumen:** [Resumen con tus palabras de los datos técnicos]
-      **Ticket:** [ID sin ceros de en medio]
-      **Estado:** [Estatus traducido]
-      **Asignado a:** [Grupo/Agente]
-      **Fecha:** [Fecha formateada como '3 de enero de 2025']
-      **Detalles:** [Descripción o Solución]"
+- Lógica de Apps: Para Citrix, VPN, Windows, WiFi, usa 'Directorio Activo' y solo RESETEO.
+- Si falta un dato, pídelo educadamente. Si ya dijeron que es un reset, no vuelvas a preguntar.
+- Antes del último dato, indica que tomará un minuto. Al finalizar, informa que se envió al buzón.
 
-    --- CAPACIDAD 2: RESETEO DE CONTRASEÑA ---
-    - LOGICA DIRECTA (CRÍTICO): Si el usuario ya especifica que quiere un "REINICIO" o "DESBLOQUEO", NO vuelvas a preguntarle cuál de los dos es. Pasa directamente al siguiente dato (Número de empleado).
-    - Pide los datos UNO POR UNO, a menos que el usuario pida la lista completa.
-    - ETIQUETAS A USAR (Pide estos datos exactos):
-      • "Reinicio o desbloqueo de cuenta" (Solo pídela si el usuario no especificó cuál quiere. Valores API: RESETEO o DESBLOQUEO).
-      • "Número de empleado"
-      • "Correo electrónico corporativo" (Solo @liverpool.com.mx o @suburbia.com.mx).
-      • "Lugar de nacimiento"
-      • "RFC con homoclave"
-      • "Aplicación"
-      • "Usuario de acceso"
-    - LOGICA DE APLICACIONES:
-      - Si mencionan aplicaciones de "Directorio Activo" (Citrix, VPN, Windows, WiFi, etc.), usa 'Directorio Activo' para la API e indica que solo aplica RESETEO.
-      - Para SAP (EWM, Fiori, S4hana), envía el nombre tal cual.
-    - FINALIZACIÓN: Cuando falte solo el ÚLTIMO dato, indica que el proceso tomará un minuto. Tras el éxito, informa que la contraseña fue enviada al buzón.
-
-    SEGURIDAD Y FUERA DE ALCANCE:
-    - Contacto Soportec: Teléfono 4425006484 o WhatsApp 5550988688.
-    - Requerimientos: https://epl-dwp.onbmc.com/
-    - No inventes datos. Si no tienes la información, pídela.
-
-    REGLA DE EJECUCIÓN:
-    - No digas "permíteme" o "dame un momento". Llama a la herramienta inmediatamente sin texto previo.
-    - REGLA DE ESTADO: No afirmes tener datos personales si el usuario no los dio en esta conversación específica.`;
+REGLA DE ORO: No digas "procesando" o "permíteme". Llama a la herramienta inmediatamente sin texto previo.`;
 
     return { parts: [{ text: texto }] };
 }
@@ -191,8 +162,10 @@ function filtrarDatosRelevantes(jsonCompleto) {
     return {
         "Ticket ID": jsonCompleto["Incident Number"],
         "Estatus": jsonCompleto["Status"],
+        "Grupo Asignado": jsonCompleto["Assigned Group"],
         "Asignado A": jsonCompleto["Assignee"],
-        "Resumen": jsonCompleto["Description"]
+        "Resumen": jsonCompleto["Description"],
+        "Detalle": jsonCompleto["Detailed Description"]
     };
 }
 
@@ -235,6 +208,39 @@ async function getIncidentData(incidentNumber) {
     } catch (e) { return { Error: e.message }; }
 }
 
+async function ejecutarResetUM(payloadObj) {
+    try {
+        const clean = {
+            action: String(payloadObj.action || "RESETEO").trim().toUpperCase(),
+            employnumber: String(payloadObj.employnumber || "").trim(),
+            mail: String(payloadObj.mail || "").trim(),
+            placeBirth: String(payloadObj.placeBirth || "").trim(),
+            rfc: String(payloadObj.rfc || "").trim(),
+            sysapp: String(payloadObj.sysapp || "").trim(),
+            user: String(payloadObj.user || "").trim()
+        };
+
+        const headers = {
+            Authorization: `Bearer ${CFG.UM_BEARER_TOKEN}`,
+            'Accept': 'application/json'
+        };
+
+        const resp = await axios.post(CFG.UM_RESET_URL, clean, { headers });
+        return resp.data;
+    } catch (e) {
+        return { Error: "Fallo en Reseteo", Detalle: e.response?.data || e.message };
+    }
+}
+
+function extraerTicketUM(obj) {
+    if (!obj || typeof obj !== 'object') return null;
+    const keys = ['ticket', 'folio', 'incident', 'id'];
+    for (const k of keys) if (obj[k]) return String(obj[k]);
+    const str = JSON.stringify(obj);
+    const m = str.match(/INC\d+/i) || str.match(/\b\d{6,}\b/);
+    return m ? m[0] : null;
+}
+
 app.post('/api/tts', isAuth, async (req, res) => {
     try {
         const { text, lang } = req.body;
@@ -258,43 +264,110 @@ app.post('/api/clear', isAuth, (req, res) => {
     res.json({ status: "ok", message: "Historial limpiado" });
 });
 
-// --- API CHAT ---
+// --- API CHAT CON FUNCTION CALLING ---
 app.post('/api/chat', isAuth, async (req, res) => {
     const { message, chatId, displayName } = req.body;
     const history = loadHistory(chatId);
-    const lower = message.toLowerCase();
-    let intent = /inc|ticket|estatus/.test(lower) ? 'consulta' : (/reset|reinicio|contrase/.test(lower) ? 'reset' : null);
+
+    const tools = [{
+        function_declarations: [
+            {
+                name: "consultar_estatus_ticket",
+                description: "Consulta el estado de un ticket en BMC Helix.",
+                parameters: {
+                    type: "OBJECT",
+                    properties: {
+                        ticket_id: { type: "STRING", description: "Número de incidente completo (ej. INC000000006816)." }
+                    },
+                    required: ["ticket_id"]
+                }
+            },
+            {
+                name: "reset_contrasena_um",
+                description: "Ejecuta el reseteo de contraseña en el sistema corporativo.",
+                parameters: {
+                    type: "OBJECT",
+                    properties: {
+                        action: { type: "STRING", enum: ["RESETEO", "DESBLOQUEO"] },
+                        employnumber: { type: "STRING" },
+                        mail: { type: "STRING" },
+                        placeBirth: { type: "STRING" },
+                        rfc: { type: "STRING" },
+                        sysapp: { type: "STRING" },
+                        user: { type: "STRING" }
+                    },
+                    required: ["action", "employnumber", "mail", "placeBirth", "rfc", "sysapp", "user"]
+                }
+            }
+        ]
+    }];
 
     try {
-        // Fast track para tickets directos
-        const ticketMatch = message.match(/inc\s*0*\d+/i) || message.match(/\b\d{6,}\b/);
-        if (ticketMatch && intent === 'consulta') {
-            const rawData = await getIncidentData(normalizeIncidentId(ticketMatch[0]));
-            const summary = await generarResumenFinal(message, filtrarDatosRelevantes(rawData), displayName);
-            appendToHistory(chatId, "user", message);
-            appendToHistory(chatId, "model", summary);
-            return res.json({ tipo: "texto", respuesta: summary });
-        }
-
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${CFG.MODEL_ID}:generateContent?key=${CFG.GEMINI_API_KEY}`;
+        const contents = history.concat([{ role: "user", parts: [{ text: message }] }]);
+
         const payload = {
             system_instruction: getContextSophia(displayName || "Usuario"),
-            contents: history.concat([{ role: "user", parts: [{ text: message }] }]),
-            safetySettings: [
-                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-            ]
+            contents,
+            tools,
+            safetySettings: [{ category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }]
         };
 
         const geminiResp = await axios.post(url, payload);
-        const text = geminiResp.data.candidates[0].content.parts[0].text;
+        const candidate = geminiResp.data.candidates[0].content;
+        const part = candidate.parts[0];
 
+        if (part.functionCall) {
+            const { name, args } = part.functionCall;
+            let resultData;
+
+            if (name === "consultar_estatus_ticket") {
+                const raw = await getIncidentData(normalizeIncidentId(args.ticket_id));
+                resultData = filtrarDatosRelevantes(raw);
+            } else if (name === "reset_contrasena_um") {
+                const umResp = await ejecutarResetUM(args);
+                if (umResp.Error) {
+                    resultData = { Error: "No se pudo completar el reseteo. Contacte a Soportec." };
+                } else {
+                    const ticket = extraerTicketUM(umResp);
+                    resultData = { Status: "Éxito", Ticket: ticket || "Generado", Mensaje: "Contraseña enviada al buzón." };
+                }
+            }
+
+            // Segunda llamada para resumir el resultado de la función
+            const secondPayload = {
+                system_instruction: getContextSophia(displayName || "Usuario"),
+                contents: contents.concat([
+                    { role: "model", parts: [part] },
+                    {
+                        role: "function",
+                        parts: [{
+                            functionResponse: {
+                                name: name,
+                                response: resultData
+                            }
+                        }]
+                    }
+                ])
+            };
+
+            const secondResp = await axios.post(url, secondPayload);
+            const finalBotText = secondResp.data.candidates[0].content.parts[0].text;
+
+            appendToHistory(chatId, "user", message);
+            appendToHistory(chatId, "model", finalBotText);
+            return res.json({ tipo: "texto", respuesta: finalBotText });
+        }
+
+        const botText = part.text;
         appendToHistory(chatId, "user", message);
-        appendToHistory(chatId, "model", text);
-        res.json({ tipo: "texto", respuesta: text });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        appendToHistory(chatId, "model", botText);
+        res.json({ tipo: "texto", respuesta: botText });
+
+    } catch (e) {
+        console.error("Error en Chat:", e.message);
+        res.status(500).json({ error: "Ocurrió un error al procesar tu solicitud." });
+    }
 });
 
 app.listen(PORT, () => console.log(`SophIA Server running on port ${PORT}`));
