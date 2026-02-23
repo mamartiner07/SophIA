@@ -1083,8 +1083,7 @@
                 if (data.displayName) {
                     userFullName = data.displayName;
                     const nameElem = document.getElementById('user-display-name');
-                    if (nameElem) nameElem.innerText = data.displayName;
-
+                    if (nameElem) nameElem.innerText = userFullName;
                     console.log("Autenticado como:", userFullName);
                 }
             } catch (e) {
@@ -1092,6 +1091,7 @@
             }
         }
 
+        // Ejecutar al cargar la página
         fetchGoogleProfile();
     </script>
 
@@ -1200,17 +1200,6 @@
 
 
     <script>
-        // Al inicio de tu script de frontend
-        let currentUser = "Usuario Demo";
-
-        async function fetchProfile() {
-            const res = await fetch('/api/user-profile');
-            const data = await res.json();
-            currentUser = data.displayName;
-            document.getElementById('user-name-display').innerText = currentUser; // Si tienes un elemento para el nombre
-        }
-
-        fetchProfile();
         // --- VARIABLES GLOBALES ---
         let recognition = null;
         let isListening = false;
@@ -2492,9 +2481,8 @@
 
         // Mensaje de bienvenida (HTML) e inyección con TTS
         function postWelcomeMessage() {
-            const nombre = userFullName && userFullName.trim() ? userFullName.split(' ')[0] : "usuario";
-            
-            const saludoHtml = `¡Hola <strong>${nombre}</strong>! Soy Sophia, el asistente virtual de Soportec. Estoy aquí para agilizar tu día haciendo reinicios de contraseñas, desbloqueo de cuentas y consultando el estatus de tus tickets en tiempo real. ¿En qué puedo ayudarte hoy?`;
+            const firstName = userFullName.split(' ')[0].charAt(0).toUpperCase() + userFullName.split(' ')[0].slice(1).toLowerCase();
+            const saludoHtml = `¡Hola ${firstName}! soy Sophia, el asistente virtual de Soportec. Estoy aquí para agilizar tu día haciendo reinicios de contraseñas, desbloqueo de cuentas y consultando el estatus de tus tickets en tiempo real. ¿En que puedo ayudarte hoy?`;
 
             lockUI({ hideQuickActions: true });
             const loader = document.getElementById('loading');
@@ -2517,6 +2505,7 @@
             });
             scrollToBottom();
         }
+
     </script>
 
     <script>
