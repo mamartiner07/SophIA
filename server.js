@@ -226,7 +226,7 @@ function filtrarDatosRelevantes(jsonCompleto) {
         "Grupo Asignado": jsonCompleto["Assigned Group"],
         "Asignado A": jsonCompleto["Assignee"],
         "Resumen": jsonCompleto["Description"],
-        "Detalle": jsonCompleto["Detailed Description"],
+        "Detalle": jsonCompleto["Detailed Decription"],
         "Fecha": jsonCompleto["Report Date"] || jsonCompleto["Submit Date"]
     };
 }
