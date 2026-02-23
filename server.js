@@ -42,6 +42,9 @@ passport.use(new GoogleStrategy({
 
 function isAuth(req, res, next) {
     if (req.isAuthenticated()) return next();
+    if (req.path.startsWith('/api/')) {
+        return res.status(401).json({ error: 'Sesión expirada', redirect: '/auth/google' });
+    }
     res.redirect('/auth/google');
 }
 
@@ -230,7 +233,7 @@ async function getIncidentData(incidentNumber) {
     } catch (e) { return { Error: e.message }; }
 }
 
-app.post('/api/tts', async (req, res) => {
+app.post('/api/tts', isAuth, async (req, res) => {
     try {
         const { text, lang } = req.body;
         const url = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${CFG.GCLOUD_TTS_API_KEY}`;
@@ -238,7 +241,7 @@ app.post('/api/tts', async (req, res) => {
             input: { text },
             voice: { languageCode: lang || 'es-MX', ssmlGender: 'FEMALE' },
             audioConfig: { audioEncoding: 'MP3' }
-        }; 
+        };
         const resp = await axios.post(url, payload);
         res.json({ audio: resp.data.audioContent, type: 'audio/mp3' });
     } catch (error) {
@@ -247,7 +250,7 @@ app.post('/api/tts', async (req, res) => {
     }
 });
 
-app.post('/api/clear', (req, res) => {
+app.post('/api/clear', isAuth, (req, res) => {
     const { chatId } = req.body;
     messageHistory.delete(chatId);
     res.json({ status: "ok", message: "Historial limpiado" });
