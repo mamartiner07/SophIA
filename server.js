@@ -123,7 +123,7 @@ function getContextSophia(displayName) {
            TU OBJETIVO:
            Recibir datos técnicos de un ticket y presentarlos al usuario de forma ejecutiva, limpia y amigable. Siempre debes sonar amable y servicial, mostrando estar a disposición del usuario en todo momento. Siempre con actitud de servicio.
 
-           Regla de trato: Dirígete siempre al usuario por su nombre como **\${firstName}** en cada respuesta (sin emojis) y mantén un tono profesional y amable. No hagas que parezca un interrogatorio, inicia cada pregunta con una frase diferente, agradeciendo al usuario, diciendo cosas diferentes, sin que en cada una digas "Claro \${firstName}", sino dándole variedad a la conversación.
+           Regla de trato: Dirígete siempre al usuario por su nombre como **${firstName}** en cada respuesta (sin emojis) y mantén un tono profesional y amable. No hagas que parezca un interrogatorio, inicia cada pregunta con una frase diferente, agradeciendo al usuario, diciendo cosas diferentes, sin que en cada una digas "Claro ${firstName}", sino dándole variedad a la conversación.
 
            Los tickets que te va a proporcionar el usuario se conforman de las letras INC seguida de ceros y dígitos al final. Por ejemplo INC000000006816. Si el usuario te pide estatus del ticket con terminación 1730, debes rellenar con ceros hasta obtener INC y 12 dígitos; este será el valor que le pasarás a la función que busca el ticket. Siempre dale al usuario los datos del ticket. No respondas hasta que hayas ejecutado la función de búsqueda de ticket.
 
@@ -136,7 +136,7 @@ function getContextSophia(displayName) {
            4. Nunca respondas con el ticket completo; si el ticket es INC000000007910 elimina los 0 de en medio y refiérete al ticket como INC7910.
 
            PLANTILLA DE RESPUESTA ESPERADA:
-           Claro, **\${firstName}**, estos son los detalles del ticket solicitado:
+           Claro, **${firstName}**, estos son los detalles del ticket solicitado:
 
             **Resumen:**
            [Aquí necesito que hagas un resumen con tus propias palabras de los datos que tengas del ticket]
@@ -233,7 +233,9 @@ async function generarResumenFinal(mensajeOriginal, datosJson, displayName) {
 
     try {
         const resp = await axios.post(url, payload);
-        return resp.data.candidates[0].content.parts[0].text;
+        const candidates = resp.data.candidates;
+        if (!candidates || candidates.length === 0) return "No pude generar el resumen por filtros de seguridad.";
+        return candidates[0].content.parts[0].text;
     } catch (e) {
         return "No pude generar el resumen. Datos: " + JSON.stringify(datosJson);
     }
@@ -360,11 +362,21 @@ app.post('/api/chat', isAuth, async (req, res) => {
             system_instruction: getContextSophia(displayName || "Usuario"),
             contents,
             tools,
-            safetySettings: [{ category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }]
+            safetySettings: [
+                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+            ]
         };
 
         const geminiResp = await axios.post(url, payload);
-        const candidate = geminiResp.data.candidates[0].content;
+        const candidates = geminiResp.data.candidates;
+        if (!candidates || candidates.length === 0) {
+            return res.json({ tipo: "texto", respuesta: "Lo siento, no pude procesar tu mensaje por reglas de seguridad de la IA. Por favor intenta con otras palabras." });
+        }
+
+        const candidate = candidates[0].content;
         const part = candidate.parts[0];
 
         if (part.functionCall) {
@@ -402,7 +414,11 @@ app.post('/api/chat', isAuth, async (req, res) => {
             };
 
             const secondResp = await axios.post(url, secondPayload);
-            const finalBotText = secondResp.data.candidates[0].content.parts[0].text;
+            const secondCandidates = secondResp.data.candidates;
+            if (!secondCandidates || secondCandidates.length === 0) {
+                return res.json({ tipo: "texto", respuesta: "Lo siento, la respuesta fue bloqueada por filtros de seguridad. El ticket/reseteo se procesó, pero no puedo mostrártelo así." });
+            }
+            const finalBotText = secondCandidates[0].content.parts[0].text;
 
             appendToHistory(chatId, "user", message);
             appendToHistory(chatId, "model", finalBotText);
