@@ -2115,11 +2115,9 @@
             try { if (!audioPlayer.paused) audioPlayer.pause(); } catch { }
 
             // 4) Transformaciones solo-para-voz (emails, URLs, siglas)
-            const linkSafe = transformLinkLikeSegmentsForSpeech(cleanText);
-            const finalTxt = verbalizeAcronymsForSpeech(linkSafe);
-
             // 5) Normalizar para TTS
-            const prepared = formatForGoogleTTS(finalTxt);
+            const langIso = detectLanguageFast(finalTxt);
+            const prepared = formatForGoogleTTS(finalTxt, langIso);
             if (!prepared || prepared.trim().length === 0) {
                 onEnd();
                 return;
@@ -2148,7 +2146,6 @@
                 return;
             }
 
-            const langIso = detectLanguageFast(prepared);
             const ttsLang = (langIso === 'en') ? 'en-US' : 'es-MX';
 
             const sentences = prepared.split(/\n+/).filter(s => s.trim().length > 0);
@@ -2326,21 +2323,26 @@
         }
 
         // ========= Normalización de texto para TTS =========
-        function formatForGoogleTTS(input) {
+        function formatForGoogleTTS(input, lang = 'es') {
             let t = String(input || '');
-            // Personalización de pronunciación
-            t = t.replace(/liverpool/gi, 'liverpúl');
 
-            t = t.replace(/\b(N[º°o]\.?|No\.?|N°|Nº)\s*(de\s+|del\s+)?empleado\b/gi, 'Número de empleado');
-            t = t.replace(/\b(N[º°o]\.?|No\.?|N°|Nº)\s*(de\s+|del\s+)?tienda\b/gi, 'Número de tienda');
-            t = t.replace(/\b(N[º°o]\.?|No\.?|N°|Nº)\s*(?=\w|\d)/g, 'Número ');
+            // Reglas exclusivas para ESPAÑOL
+            if (lang === 'es') {
+                t = t.replace(/liverpool/gi, 'liverpúl');
+                t = t.replace(/\b(N[º°o]\.?|No\.?|N°|Nº)(\s+|\.)(de\s+|del\s+)?empleado\b/gi, 'Número de empleado');
+                t = t.replace(/\b(N[º°o]\.?|No\.?|N°|Nº)(\s+|\.)(de\s+|del\s+)?tienda\b/gi, 'Número de tienda');
+                t = t.replace(/\b(N[º°o]\.?|No\.?|N°|Nº)(\s+|\.)(?=\w|\d)/g, 'Número ');
+            }
+
             t = t.replace(/^[\s]*[-–—_]{3,}[\s]*$/gm, ' … ');
             t = t.replace(/[-–—]{2,}/g, ' – ');
             t = t.replace(/\b(\d{5,})\b/g, (m) => m.split('').join(' '));
-            t = t.replace(/(n[uú]mero\s+de\s+empleado[:\s]*)(\d{2,})/gi,
-                (_, prefix, num) => `${prefix}${num.split('').join(' ')}`);
-            t = t.replace(/(employee\s+number[:\s]*)(\d{2,})/gi,
-                (_, prefix, num) => `${prefix}${num.split('').join(' ')}`);
+
+            // Ajuste de pronunciación de números en etiquetas (ahora multilenguaje en concepto)
+            const numLabelPrefix = (lang === 'es') ? 'n[uú]mero\\s+de\\s+empleado' : 'employee\\s+number';
+            const numLabelRx = new RegExp(`(${numLabelPrefix}[:\\s]*)(\\d{2,})`, 'gi');
+            t = t.replace(numLabelRx, (_, prefix, num) => `${prefix}${num.split('').join(' ')}`);
+
             t = t.replace(/\b(RFC[:\s]*)([A-Za-zÑ&]{3,4}\d{2,}[A-Za-z0-9]{0,})\b/gi,
                 (m, prefix, r) => {
                     const r2 = r.replace(/\d{4,}/g, (n) => n.split('').join(' '));
