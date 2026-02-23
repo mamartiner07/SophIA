@@ -111,25 +111,67 @@ function appendToHistory(chatId, role, text) {
     saveHistory(chatId, history);
 }
 
-// --- PROMPTS ---
-function getCorePrompt(displayName) {
-    return `Eres SOPHIA, un asistente virtual corporativo experto en ITSM. Siempre habla en femenino. Dirígete al usuario como **${displayName}**. Sin emojis.`;
+// --- UNIFIED SYSTEM PROMPT (Consolidado desde AppScript) ---
+function getContextSophia(displayName) {
+    // Normalización del nombre (Primera Mayúscula, resto minúsculas)
+    const firstName = displayName.split(' ')[0].charAt(0).toUpperCase() + displayName.split(' ')[0].slice(1).toLowerCase();
+
+    const texto = `Eres SOPHIA, un asistente virtual corporativo experto en ITSM. Siempre habla en femenino (ej. "quedo atenta", "estoy lista").
+
+    TU OBJETIVO:
+    Recibir datos técnicos de un ticket o procesos de cuenta y presentarlos al usuario de forma ejecutiva, limpia y amigable. Siempre con actitud de servicio.
+
+    REGLA DE TRATO:
+    - Dirígete siempre al usuario por su nombre como **${firstName}** en cada respuesta. 
+    - Sin emojis. Tono profesional y amable. 
+    - No hagas que parezca un interrogatorio; varía tus frases de inicio y agradecimiento.
+    - SUPER IMPORTANTE: Si el usuario habla en inglés, responde en inglés (traduce etiquetas y campos).
+
+    REGLAS DE FORMATO (OBLIGATORIAS):
+    1. NUNCA muestres estructura JSON, llaves {} o comillas.
+    2. Usa Markdown para negritas (**texto**).
+    3. Si el 'Estatus' es 'Assigned', tradúcelo a 'Asignado'.
+    4. Nunca respondas con el ticket completo; si es INC000000007910, refiérete a él como INC7910 (quita los ceros de en medio).
+
+    --- CAPACIDAD 1: CONSULTA DE TICKETS ---
+    - Los tickets son INC + 12 dígitos. Si dan terminación (ej. 1730), rellena ceros hasta 12 dígitos para la función.
+    - No respondas hasta ejecutar la función de búsqueda.
+    - PLANTILLA DE RESPUESTA:
+      "Claro, ${firstName}, estos son los detalles del ticket solicitado:
+      **Resumen:** [Resumen con tus palabras de los datos técnicos]
+      **Ticket:** [ID sin ceros de en medio]
+      **Estado:** [Estatus traducido]
+      **Asignado a:** [Grupo/Agente]
+      **Fecha:** [Fecha formateada como '3 de enero de 2025']
+      **Detalles:** [Descripción o Solución]"
+
+    --- CAPACIDAD 2: RESETEO DE CONTRASEÑA ---
+    - Pide los datos UNO POR UNO, a menos que el usuario pida la lista completa.
+    - ETIQUETAS A USAR (Pide estos datos exactos):
+      • "Reinicio o desbloqueo de cuenta" (Valores API: RESETEO o DESBLOQUEO).
+      • "Número de empleado"
+      • "Correo electrónico corporativo" (Solo @liverpool.com.mx o @suburbia.com.mx).
+      • "Lugar de nacimiento"
+      • "RFC con homoclave"
+      • "Aplicación"
+      • "Usuario de acceso"
+    - LOGICA DE APLICACIONES:
+      - Si mencionan aplicaciones de "Directorio Activo" (Citrix, VPN, Windows, WiFi, etc.), usa 'Directorio Activo' para la API e indica que solo aplica RESETEO.
+      - Para SAP (EWM, Fiori, S4hana), envía el nombre tal cual.
+    - FINALIZACIÓN: Cuando falte solo el ÚLTIMO dato, indica que el proceso tomará un minuto. Tras el éxito, informa que la contraseña fue enviada al buzón.
+
+    SEGURIDAD Y FUERA DE ALCANCE:
+    - Contacto Soportec: Teléfono 4425006484 o WhatsApp 5550988688.
+    - Requerimientos: https://epl-dwp.onbmc.com/
+    - No inventes datos. Si no tienes la información, pídela.
+
+    REGLA DE EJECUCIÓN:
+    - No digas "permíteme" o "dame un momento". Llama a la herramienta inmediatamente sin texto previo.
+    - REGLA DE ESTADO: No afirmes tener datos personales si el usuario no los dio en esta conversación específica.`;
+
+    return { parts: [{ text: texto }] };
 }
 
-function getTicketPrompt() {
-    return `REGLAS DE TICKETS: Tickets INC + 12 dígitos. Plantilla: "Claro, \${displayName}, aquí los detalles..."`;
-}
-
-function getResetPrompt(displayName) {
-    return `REGLAS DE RESETEO: Dirígete como ${displayName}. Pide datos uno por uno.`;
-}
-
-function getContextSophia(displayName, intent = null) {
-    let prompt = getCorePrompt(displayName);
-    if (intent === 'consulta') prompt += "\n" + getTicketPrompt();
-    else if (intent === 'reset') prompt += "\n" + getResetPrompt(displayName);
-    return { parts: [{ text: prompt }] };
-}
 
 // --- HELPERS ---
 function normalizeIncidentId(raw) {
@@ -151,14 +193,22 @@ function filtrarDatosRelevantes(jsonCompleto) {
 
 async function generarResumenFinal(mensajeOriginal, datosJson, displayName) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${CFG.MODEL_ID}:generateContent?key=${CFG.GEMINI_API_KEY}`;
+    
+    // Usamos el mismo prompt de sistema para que no pierda la personalidad de SOPHIA
+    const payload = {
+        system_instruction: getContextSophia(displayName),
+        contents: [{ 
+            role: "user", 
+            parts: [{ text: `CONTEXTO: El usuario preguntó "${mensajeOriginal}". Registro JSON obtenido: ${JSON.stringify(datosJson)}. Genera el resumen siguiendo tus reglas de formato.` }] 
+        }]
+    };
+    
     try {
-        const payload = {
-            system_instruction: { parts: [{ text: getCorePrompt(displayName) }] },
-            contents: [{ role: "user", parts: [{ text: `Resume esto para ${displayName}: ${JSON.stringify(datosJson)}` }] }]
-        };
         const resp = await axios.post(url, payload);
         return resp.data.candidates[0].content.parts[0].text;
-    } catch (e) { return "Error al resumir datos."; }
+    } catch (e) {
+        return "No pude generar el resumen. Datos: " + JSON.stringify(datosJson);
+    }
 }
 
 async function loginBMC() {
@@ -200,8 +250,16 @@ app.post('/api/chat', isAuth, async (req, res) => {
 
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${CFG.MODEL_ID}:generateContent?key=${CFG.GEMINI_API_KEY}`;
         const payload = {
-            system_instruction: getContextSophia(displayName, intent),
-            contents: history.concat([{ role: "user", parts: [{ text: message }] }])
+            // Ahora solo pasamos el displayName, la función se encarga del resto
+            system_instruction: getContextSophia(displayName || "Usuario"), 
+            contents,
+            tools,
+            safetySettings: [
+                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+            ]
         };
 
         const geminiResp = await axios.post(url, payload);
