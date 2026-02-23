@@ -2115,6 +2115,9 @@
             try { if (!audioPlayer.paused) audioPlayer.pause(); } catch { }
 
             // 4) Transformaciones solo-para-voz (emails, URLs, siglas)
+            const linkSafe = transformLinkLikeSegmentsForSpeech(cleanText);
+            const finalTxt = verbalizeAcronymsForSpeech(linkSafe);
+
             // 5) Normalizar para TTS
             const langIso = detectLanguageFast(finalTxt);
             const prepared = formatForGoogleTTS(finalTxt, langIso);
