@@ -1,298 +1,2884 @@
-require('dotenv').config();
-const express = require('express');
-const axios = require('axios');
-const cors = require('cors');
-const path = require('path');
-const passport = require('passport');
-const session = require('express-session');
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
+<!DOCTYPE html>
+<html>
 
-const app = express();
-const PORT = process.env.PORT || 8080;
+<head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <title>SOPHIA - BMC Helix Agent</title>
 
-app.set('trust proxy', 1);
-
-app.use(session({
-    secret: 'sophia_secret_key_2024',
-    resave: false,
-    saveUninitialized: false,
-    cookie: { secure: true, sameSite: 'lax' }
-}));
-
-app.use(passport.initialize());
-app.use(passport.session());
-
-passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((user, done) => done(null, user));
-
-passport.use(new GoogleStrategy({
-    clientID: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: "/auth/google/callback",
-    proxy: true
-},
-    (accessToken, refreshToken, profile, done) => {
-        const email = profile.emails[0].value.toLowerCase();
-        if (email.endsWith('@liverpool.com.mx') || email.endsWith('@suburbia.com.mx')) {
-            return done(null, profile);
+    <style>
+        :root {
+            --primary: #a14681;
+            --accent: #e6801a;
+            --bg: #eceff1;
+            --chat-bg: #ffffff;
+            --user-msg: #F18020;
+            --bot-msg: #f5f5f5;
         }
-        return done(null, false, { message: 'Dominio no autorizado' });
-    }
-));
 
-function isAuth(req, res, next) {
-    if (req.isAuthenticated()) return next();
-    if (req.path.startsWith('/api/')) {
-        return res.status(401).json({ error: 'Sesión expirada', redirect: '/auth/google' });
-    }
-    res.redirect('/auth/google');
-}
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+            height: 100vh;
+        }
 
-app.use(cors());
-app.use(express.json());
+        .chat-wrapper {
+            display: flex;
+            flex-direction: column;
+            background: var(--chat-bg);
+            position: relative;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+        }
 
-// --- NUEVA RUTA: Obtener Perfil desde Helix usando el correo de Google ---
-app.get('/api/user-profile', isAuth, async (req, res) => {
-    try {
-        const email = req.user.emails[0].value;
-        const jwt = await loginBMC();
-        const headers = { Authorization: `AR-JWT ${jwt}`, Accept: 'application/json' };
+        @media (min-width: 768px) {
+            body {
+                background-image: radial-gradient(#cfd8dc 1px, transparent 1px);
+                background-size: 20px 20px;
+            }
 
-        // Consulta a CTM:People por correo electrónico
-        const qualification = `'Internet E-mail'="${email}"`;
-        const url = `${CFG.BMC_REST_URL}/api/arsys/v1/entry/CTM:People?q=${encodeURIComponent(qualification)}`;
+            .chat-wrapper {
+                width: 90%;
+                max-width: 1000px;
+                height: 90vh;
+                border-radius: 16px;
+                box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            }
+        }
 
-        const response = await axios.get(url, { headers });
-        const personData = response.data.entries[0]?.values;
+        /* --- HEADER --- */
+        .header {
+            background: #a14681;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            z-index: 10;
+            margin-bottom: 2px;
+            /* separación respecto al contenido */
+        }
 
-        // Extraemos el nombre o usamos el nombre de Google como respaldo
-        const firstName = personData ? personData['First Name'] : req.user.name.givenName;
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            /* izquierda y derecha separadas */
+            align-items: center;
+        }
 
-        res.json({
-            displayName: firstName,
-            email: email,
-            photo: req.user.photos[0].value
+        /* Izquierda */
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-icon {
+            width: 200px;
+            height: 50px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center
+        }
+
+        .header-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            border-radius: 6px;
+            display: block;
+        }
+
+        .header-info h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .header-status {
+            font-size: 11px;
+            opacity: 0.9;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #00e676;
+            border-radius: 50%;
+        }
+
+        /* --- TTS TOGGLE --- */
+        .tts-toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 4px 10px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background 0.2s;
+            user-select: none;
+        }
+
+        .tts-toggle-container:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .tts-switch {
+            position: relative;
+            display: inline-block;
+            width: 34px;
+            height: 18px;
+        }
+
+        .tts-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .tts-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .tts-slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked+.tts-slider {
+            background-color: #00e676;
+        }
+
+        input:checked+.tts-slider:before {
+            transform: translateX(16px);
+        }
+
+        /* Derecha */
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* Estilo del chip (nombre + punto) */
+        .user-email-panel {
+            font-size: 13px;
+            font-weight: 600;
+            opacity: 0.95;
+            padding: 4px 10px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.15);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Barra separadora bajo el header (opcional) */
+        .header-spacer {
+            height: 1px;
+            background: #a14681;
+            border-radius: 1px;
+        }
+
+        /* --- CONTENIDO (mensajes + input) --- */
+        .content {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            /* ocupa el resto del alto */
+            min-height: 0;
+            background: #ffffff;
+        }
+
+        #messages {
+            flex: 1;
+            padding: 25px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            background-color: #f8f9fa;
+            scroll-behavior: smooth;
+        }
+
+        .msg {
+            padding: 14px 20px;
+            border-radius: 12px;
+            font-size: 15px;
+            line-height: 1.5;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            word-wrap: break-word;
+        }
+
+        @media (min-width: 768px) {
+            .msg {
+                max-width: 70%;
+            }
+        }
+
+        @media (max-width: 767px) {
+            .msg {
+                max-width: 85%;
+            }
+        }
+
+        .user {
+            background: var(--user-msg);
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 2px;
+        }
+
+        .bot {
+            background: var(--bot-msg);
+            color: #333;
+            align-self: flex-start;
+            border-bottom-left-radius: 2px;
+            border-left: 4px solid var(--accent);
+        }
+
+        .bot strong {
+            color: #a14681;
+        }
+
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            align-self: center;
+            border: 1px solid #ef9a9a;
+            text-align: center;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .input-area {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        input {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 30px;
+            outline: none;
+            font-size: 16px;
+            transition: border 0.3s;
+            color: #333;
+            background: #fafafa;
+        }
+
+        input:focus {
+            border-color: var(--primary);
+            background: #fff;
+        }
+
+        .action-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            transition: transform 0.1s, background 0.3s;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .action-btn:active {
+            transform: scale(0.95);
+        }
+
+        #sendBtn {
+            background: var(--primary);
+        }
+
+        #sendBtn:hover {
+            background: #642c51;
+        }
+
+        #sendBtn:disabled {
+            background: #b0bec5;
+            cursor: default;
+        }
+
+        #micBtn {
+            background: #a14681;
+            margin-right: 5px;
+        }
+
+        #micBtn:hover {
+            background: #642c51;
+        }
+
+        #micBtn.listening {
+            background: #d32f2f;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(211, 47, 47, 0.4);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(211, 47, 47, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(211, 47, 47, 0);
+            }
+        }
+
+        .typing-indicator {
+            display: none;
+            align-self: flex-start;
+            margin-left: 20px;
+            margin-bottom: 10px;
+            font-style: italic;
+            color: #78909c;
+            font-size: 13px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 5px 10px;
+            border-radius: 10px;
+        }
+
+        #messages::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #messages::-webkit-scrollbar-thumb {
+            background-color: #cfd8dc;
+            border-radius: 4px;
+        }
+
+        /* Confirm-card (si lo usas) */
+        .confirm-card {
+            background: var(--user-msg);
+            color: #fff;
+            align-self: flex-end;
+            border-bottom-right-radius: 2px;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+
+        .confirm-card * {
+            box-sizing: border-box;
+        }
+
+        .confirm-title {
+            font-weight: 700;
+            margin: 0 0 6px 0;
+        }
+
+        .confirm-desc {
+            opacity: 0.9;
+            font-size: 13px;
+            margin: 0 0 10px 0;
+        }
+
+        /* Input de confirmación con auto‑size horizontal */
+        .confirm-input {
+            /* IMPORTANTE: el auto-size funciona mejor con monospace.
+          Si prefieres mantener tu fuente actual, déjalo en sans-serif;
+          el JS igualmente calculará el ancho con precision usando un “mirror”. */
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+            display: inline-block;
+            /* Permite que el ancho se ajuste */
+            width: auto;
+            /* Ancho calculado por JS */
+            max-width: 100%;
+            /* Nunca exceder el ancho de la tarjeta */
+            min-width: 12ch;
+            /* Ancho mínimo legible */
+            box-sizing: content-box;
+            /* Calculamos ancho por contenido (padding fuera) */
+
+            margin-top: 6px;
+            padding: 10px 12px;
+            border: 2px solid rgba(255, 255, 255, 0.25);
+            border-radius: 10px;
+            font-size: 15px;
+            line-height: 1.4;
+            outline: none;
+            color: #123;
+            background: #fff;
+            overflow: hidden;
+            /* Evita scroll horizontal dentro del input */
+            white-space: nowrap;
+            /* Un input no hace wrap; dejamos claro el comportamiento */
+
+            /* Suaviza el render para textos largos (opcional) */
+            text-rendering: optimizeLegibility;
+        }
+
+        /* Estados de validación (se mantienen) */
+        .valid {
+            border-color: #43a047 !important;
+        }
+
+        .invalid {
+            border-color: #e53935 !important;
+        }
+
+        .confirm-hint {
+            font-size: 12px;
+            opacity: 0.9;
+            margin-top: 6px;
+        }
+
+        .confirm-chip-area {
+            margin-top: 10px;
+        }
+
+        .chip {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            background: rgba(255, 255, 255, 0.15);
+            font-size: 13px;
+            color: #fff;
+            cursor: pointer;
+            margin: 4px 6px 0 0;
+            backdrop-filter: blur(2px);
+        }
+
+        .chip:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .confirm-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .btn-inline {
+            border: none;
+            border-radius: 10px;
+            padding: 8px 14px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: filter .15s;
+        }
+
+        .btn-inline.primary {
+            background: #00bfa5;
+            color: #063;
+        }
+
+        .btn-inline.primary:hover {
+            filter: brightness(1.05);
+        }
+
+        .btn-inline.secondary {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+        }
+
+        .btn-inline.secondary:hover {
+            filter: brightness(1.1);
+        }
+
+        .valid {
+            border-color: #43a047 !important;
+        }
+
+        .invalid {
+            border-color: #e53935 !important;
+        }
+
+        .confirm-card.confirmed {
+            background: var(--user-msg);
+        }
+
+        .confirm-value {
+            margin-top: 8px;
+            background: #fff;
+            color: #123;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+            word-break: break-word;
+            white-space: normal;
+        }
+
+        .invalid {
+            border-color: #e53935 !important;
+        }
+
+
+        .msg {
+            animation: elasticPop 0.35s ease-out forwards;
+            transform-origin: bottom left;
+        }
+
+        @keyframes elasticPop {
+            0% {
+                transform: scale(0.7);
+                opacity: 0;
+            }
+
+            60% {
+                transform: scale(1.05);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+
+        .msg.bot::after {
+            content: "▍";
+            animation: blink .8s infinite;
+            margin-left: 2px;
+        }
+
+        @keyframes blink {
+
+            0%,
+            50% {
+                opacity: 1;
+            }
+
+            50%,
+            100% {
+                opacity: 0;
+            }
+        }
+
+        .msg.bot.done::after {
+            content: "";
+        }
+
+
+        /* ===== START SCREEN — moderno, sin lag, clic seguro ===== */
+        .start-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+
+            /* Aparición */
+            opacity: 1 !important;
+            transition: none !important;
+
+            /* Fondo suave SIN blur de fondo del navegador */
+            background: radial-gradient(circle at center,
+                    rgba(255, 255, 255, 0.95),
+                    rgba(245, 245, 250, 0.90) 60%,
+                    rgba(240, 240, 250, 0.88));
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+
+            /*  recorta cualquier cosa que sobresalga (nuestro canvas oversize) */
+            overflow: hidden;
+
+            display: grid;
+            place-items: center;
+        }
+
+        /* estado oculto */
+        .start-screen.hidden {
+            opacity: 0 !important;
+            pointer-events: none;
+            transition: opacity .45s ease !important;
+        }
+
+        .siri-container {
+            position: relative;
+            z-index: 2;
+            /* arriba del canvas de partículas */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            animation: floatIn .45s ease forwards;
+        }
+
+        .siri-canvas {
+            position: absolute;
+            z-index: 0;
+            pointer-events: none;
+            filter: none;
+            /* sin inset/width/height aquí */
+        }
+
+
+        .siri-avatar-btn {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            border: none;
+            background: transparent;
+            display: grid;
+            place-items: center;
+            cursor: pointer;
+            outline: none;
+            z-index: 3;
+            /* por encima del aura */
+        }
+
+        .siri-avatar-core {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: radial-gradient(circle at 40% 30%, #c86aa7, #a14681 70%);
+            box-shadow:
+                0 35px 60px rgba(161, 70, 129, 0.25),
+                0 18px 30px rgba(161, 70, 129, 0.18);
+            filter: blur(2.5px);
+            animation: avatarBreath 3.2s ease-in-out infinite;
+            will-change: transform, filter;
+        }
+
+        .siri-aura {
+            position: absolute;
+            width: 230px;
+            height: 230px;
+            border-radius: 50%;
+            background: radial-gradient(circle,
+                    rgba(161, 70, 129, 0.28) 0%,
+                    rgba(161, 70, 129, 0.12) 40%,
+                    rgba(161, 70, 129, 0.04) 70%,
+                    rgba(161, 70, 129, 0.00) 100%);
+            filter: blur(40px);
+            opacity: 0.65;
+            z-index: 1;
+            /* debajo del botón */
+            pointer-events: none;
+            /* clave: no intercepta el click */
+            animation: auraFloat 5.8s ease-in-out infinite alternate;
+        }
+
+        .siri-text {
+            font-size: 18px;
+            color: #444;
+            font-weight: 600;
+            text-align: center;
+            opacity: 0;
+            animation: fadeUp .45s ease .25s forwards;
+        }
+
+        /* Animaciones */
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes floatIn {
+            from {
+                opacity: 0;
+                transform: translateY(16px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes avatarBreath {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        @keyframes auraFloat {
+            from {
+                transform: translateY(-4px);
+            }
+
+            to {
+                transform: translateY(4px);
+            }
+        }
+
+        /* ===== FIX: canvas y start-screen with real size ===== */
+
+        .start-screen {
+            width: 100vw !important;
+            height: 100vh !important;
+            min-width: 100vw !important;
+            min-height: 100vh !important;
+            position: fixed !important;
+            inset: 0 !important;
+            display: grid !important;
+            place-items: center !important;
+        }
+
+
+
+
+        #micBtn img {
+            width: 35px;
+            /* tamaño muy similar al emoji */
+            height: 35px;
+            object-fit: contain;
+            pointer-events: none;
+            /* para que el click siga siendo del botón */
+        }
+
+
+
+        /* --- INDICADOR MEJORADO — SOFISTICADO --- */
+        .typing-indicator {
+            display: none;
+            align-self: flex-start;
+            margin: 5px 25px 0;
+            font-size: 13px;
+            color: #6f7a80;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            opacity: 0;
+            animation: fadeInTyping 0.25s ease forwards;
+            flex-direction: row !important;
+        }
+
+
+        .typing-indicator {
+            background-color: #f8f9fa !important;
+            /* mismo color que #messages */
+            padding: 4px 10px;
+            border-radius: 12px;
+        }
+
+
+        @keyframes fadeInTyping {
+            from {
+                opacity: 0;
+                transform: translateY(3px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .typing-indicator .dots {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+            margin-right: 4px;
+        }
+
+        .typing-indicator .dots span {
+            width: 6px;
+            height: 6px;
+            background-color: #a14681;
+            border-radius: 50%;
+            opacity: 0.4;
+            animation: dotPulse 0.9s infinite ease-in-out;
+        }
+
+        .typing-indicator .dots span:nth-child(1) {
+            animation-delay: 0s;
+        }
+
+        .typing-indicator .dots span:nth-child(2) {
+            animation-delay: 0.18s;
+        }
+
+        .typing-indicator .dots span:nth-child(3) {
+            animation-delay: 0.36s;
+        }
+
+        @keyframes dotPulse {
+            0% {
+                transform: translateY(0);
+                opacity: 0.4;
+            }
+
+            50% {
+                transform: translateY(-5px);
+                opacity: 1;
+            }
+
+            100% {
+                transform: translateY(0);
+                opacity: 0.4;
+            }
+        }
+
+
+        /* --- QUICK ACTIONS --- */
+        .quick-actions {
+            display: none;
+            /* se muestra por JS */
+            justify-content: center;
+            /* ⬅️ centra horizontalmente */
+            align-items: center;
+            gap: 12px;
+            margin: 8px 0 16px;
+            /* sin márgenes laterales, centrado real */
+            flex-wrap: wrap;
+            background: transparent;
+            /* ⬅️ fondo transparente */
+            animation: fadeInQuick 0.25s ease;
+        }
+
+        @keyframes fadeInQuick {
+            from {
+                opacity: 0;
+                transform: translateY(4px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Botón/Chip moderno “flotante” */
+        .qa-btn {
+            padding: 10px 16px;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-radius: 999px;
+            /* chip redondo */
+            background: rgba(255, 255, 255, 0.70);
+            /* semitransparente para efecto glassy */
+            color: #37474f;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform .15s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+            /* sombra “flotando” */
+            backdrop-filter: blur(4px);
+            /* glass (si el navegador lo soporta) */
+            -webkit-backdrop-filter: blur(4px);
+        }
+
+        /* Hover/Active sutil, manteniendo “flotante” */
+        .qa-btn:hover {
+            background: rgba(255, 255, 255, 0.85);
+            border-color: rgba(0, 0, 0, 0.10);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+        }
+
+        .qa-btn:active {
+            transform: translateY(1px) scale(0.99);
+        }
+
+        /* Tema coherente con SOPHIA al pasar foco (accesibilidad) */
+        .qa-btn:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(161, 70, 129, 0.25), 0 8px 22px rgba(0, 0, 0, 0.12);
+            border-color: rgba(161, 70, 129, 0.35);
+        }
+
+        /* En pantallas pequeñas, que respiren y sigan centrados */
+        @media (max-width: 480px) {
+            .quick-actions {
+                gap: 10px;
+            }
+
+            .qa-btn {
+                padding: 9px 14px;
+                font-size: 13px;
+            }
+        }
+
+        /* Igualar fondo del área inmediatamente sobre el input */
+        .content {
+            background: #f8f9fa;
+            /* antes era #ffffff */
+        }
+
+        /* Mantén el input blanco para que contraste */
+        .input-area {
+            background: #ffffff;
+        }
+
+        #loading.typing-indicator {
+            display: none;
+            align-self: flex-start;
+            margin: 5px 25px 0;
+            font-size: 13px;
+            color: #6f7a80;
+            background-color: #f8f9fa;
+            padding: 4px 10px;
+            border-radius: 12px;
+
+            /* Layout horizontal */
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 6px;
+
+            opacity: 0;
+            animation: fadeInTyping 0.25s ease forwards;
+        }
+
+        #loading .dots {
+            display: inline-flex;
+            gap: 5px;
+            align-items: center;
+            margin-right: 4px;
+        }
+
+        #loading #loadingText {
+            display: inline-block;
+            white-space: nowrap;
+        }
+
+        /* Asegura que los puntitos no estiren ni provoquen wraps raros */
+        #loading .dots {
+            display: inline-flex !important;
+            flex: 0 0 auto !important;
+            gap: 5px;
+            align-items: center;
+            margin-right: 4px;
+        }
+
+        /* Asegura que el texto se quede en la misma fila */
+        #loading #loadingText {
+            display: inline-block !important;
+            flex: 0 0 auto !important;
+            white-space: nowrap !important;
+        }
+
+        /* Estado deshabilitado visual y accesible */
+        input:disabled {
+            background: #f1f3f4;
+            color: #90a4ae;
+            cursor: not-allowed;
+        }
+
+        .action-btn:disabled {
+            opacity: .55;
+            cursor: not-allowed;
+        }
+
+        /* Deshabilitar clicks a los chips mientras escribe (los ocultamos además por JS) */
+        .quick-actions.disabled {
+            pointer-events: none;
+            opacity: .35;
+            filter: grayscale(20%);
+        }
+
+        .quick-actions {
+            gap: 10px;
+        }
+
+        .qa-btn {
+            border-radius: 999px;
+            background: transparent;
+            border: 1.5px solid rgba(55, 71, 79, 0.22);
+            color: #37474f;
+            font-weight: 600;
+            transition: color .15s ease, border-color .15s ease, transform .08s;
+        }
+
+        .qa-btn:hover {
+            border-color: rgba(161, 70, 129, 0.6);
+            color: #a14681;
+            transform: translateY(-1px);
+        }
+
+        @keyframes fadeSlideUp {
+            from {
+                opacity: 0;
+                transform: translateY(4px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .quick-actions {
+            animation: fadeSlideUp .22s ease;
+        }
+
+        .msg.bot:first-child {
+            animation: fadeSlideUp .28s ease;
+        }
+
+        .watermark {
+            position: absolute;
+            bottom: 4px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            color: rgba(0, 0, 0, 0.35);
+            opacity: 0.55;
+            pointer-events: none;
+        }
+    </style>
+
+    <!-- Incluye tus logos (define window.LOGOS.SOPORTEC) -->
+    <script src="logos.js"></script>
+</head>
+
+<body>
+    <script>
+        // --- BUSCA Y REEMPLAZA ESTA PARTE ---
+        let userFullName = "Usuario"; // Valor por defecto
+
+        async function fetchGoogleProfile() {
+            try {
+                const res = await fetch('/api/user-profile');
+                const data = await res.json();
+
+                if (data.displayName) {
+                    userFullName = data.displayName;
+                    const nameElem = document.getElementById('user-display-name');
+                    if (nameElem) nameElem.innerText = userFullName;
+                    console.log("Autenticado como:", userFullName);
+                }
+            } catch (e) {
+                console.error("Error al obtener perfil de Google:", e);
+            }
+        }
+
+        // Ejecutar al cargar la página
+        fetchGoogleProfile();
+    </script>
+
+    <!-- ===== START SCREEN ===== -->
+    <div id="startScreen" class="start-screen" role="dialog" aria-modal="true">
+
+        <!-- Partículas sutiles al fondo -->
+        <canvas id="startParticles" class="siri-canvas"></canvas>
+
+        <div class="siri-container">
+            <!-- Aura difuminada (no bloquea clics) -->
+            <div class="siri-aura"></div>
+
+            <!-- Avatar / CTA -->
+            <button id="siriAvatarBtn" class="siri-avatar-btn" aria-label="Iniciar con SOPHIA">
+                <div class="siri-avatar-core"></div>
+            </button>
+
+            <!-- Mensaje -->
+            <div class="siri-text">
+                SOPHIA está lista para ayudarte. Haz clic en el círculo para comenzar.
+            </div>
+        </div>
+
+    </div>
+    <!-- ===== /START SCREEN ===== -->
+    <div class="chat-wrapper">
+
+        <!-- HEADER -->
+        <div class="header">
+            <div class="header-top">
+                <div class="header-left">
+                    <div class="header-icon">
+                        <img id="logo-soportec" alt="Soportec" />
+                    </div>
+                    <div class="header-info">
+                        <h1></h1>
+                    </div>
+                </div>
+
+                <div class="header-right">
+                    <div class="tts-toggle-container" onclick="toggleTTS()">
+                        <span>VOZ</span>
+                        <label class="tts-switch">
+                            <input type="checkbox" id="ttsCheckbox" checked>
+                            <span class="tts-slider"></span>
+                        </label>
+                    </div>
+                    <div id="user-email" class="user-email-panel">
+                        <span class="status-dot"></span>
+                        <span id="user-display-name">
+                            Usuario Demo
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div class="header-spacer"></div>
+        </div>
+
+        <!-- CONTENIDO -->
+        <div class="content">
+
+            <div id="messages"></div>
+
+            <div id="quickActions" class="quick-actions" style="display:none;">
+                <button class="qa-btn" onclick="sendQuickAction('reinicio_contrasena')">
+                    Reinicio de contraseña
+                </button>
+
+                <button class="qa-btn" onclick="sendQuickAction('desbloqueo_cuenta')">
+                    Desbloqueo de cuenta
+                </button>
+
+                <button class="qa-btn" onclick="sendQuickAction('seguimiento_ticket')">
+                    Seguimiento de ticket
+                </button>
+
+                <button class="qa-btn" onclick="sendQuickAction('contacto_soportec')">
+                    Contactar a Soportec
+                </button>
+            </div>
+
+            <div id="loading" class="typing-indicator" aria-live="polite" aria-busy="true" style="display:none">
+                <span class="dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </span>
+                <span id="loadingText">SOPHIA está pensando...</span>
+            </div>
+
+            <div class="input-area">
+                <button id="micBtn" class="action-btn" onclick="toggleVoice()" title="Presiona para hablar"><img
+                        id="logo-microfono" alt="Microfono" /></button>
+                <input type="text" id="userInput" placeholder="Habla o escribe aquí..." onkeypress="handleKey(event)"
+                    autocomplete="off">
+                <button id="sendBtn" class="action-btn" onclick="send()" title="Enviar">➤</button>
+            </div>
+        </div> <!-- /content -->
+        <div class="chat-footer watermark">
+            © 2026 · Developed by Soportec · Powered by Gemini
+        </div>
+
+
+    </div> <!-- /chat-wrapper -->
+
+
+    <script>
+        // --- VARIABLES GLOBALES ---
+        let recognition = null;
+        let isListening = false;
+        let audioPlayer = new Audio();
+        let isSpeaking = false;
+
+
+        let pendingAutoSend = null;
+
+        function queueAutoSend(text) {
+            pendingAutoSend = (text || '').trim();
+            flushAutoSend(); // intenta enviar ya; si isTyping=true, quedará pendiente
+        }
+
+        function flushAutoSend() {
+            if (!pendingAutoSend) return;
+            if (isTyping) return; // espera a que termine el tipeo
+
+            const input = document.getElementById('userInput');
+            if (!input) return;
+
+            input.value = pendingAutoSend;
+            pendingAutoSend = null;   // limpiar para no enviar doble
+            send();                   // ahora sí, con isTyping=false
+        }
+
+
+
+        // ======= CONTROL DE UI DURANTE "ESCRIBIENDO" =======
+        let isTyping = false;  // estado global
+
+        function lockUI({ hideQuickActions = true } = {}) {
+            isTyping = true;
+
+            const input = document.getElementById('userInput');
+            const sendBtn = document.getElementById('sendBtn');
+            const micBtn = document.getElementById('micBtn');
+            const qa = document.getElementById('quickActions');
+
+            if (input) {
+                input.disabled = true;
+                input.value = ''; // ⬅️ limpia el textbox mientras escribe el LLM
+                // Guarda placeholder actual y lo reemplaza
+                if (!input.dataset.prevPh) input.dataset.prevPh = input.placeholder || '';
+                input.placeholder = 'Habla o escribe aquí…';
+            }
+            if (sendBtn) sendBtn.disabled = true;
+            if (micBtn) micBtn.disabled = true;
+
+            // Ocultar o deshabilitar Quick Actions
+            if (qa) {
+                if (hideQuickActions) {
+                    qa.style.display = 'none';
+                } else {
+                    qa.classList.add('disabled');
+                }
+            }
+        }
+
+        function unlockUI({ showQuickActions = false } = {}) {
+            isTyping = false;
+
+            const input = document.getElementById('userInput');
+            const sendBtn = document.getElementById('sendBtn');
+            const micBtn = document.getElementById('micBtn');
+            const qa = document.getElementById('quickActions');
+
+            if (input) {
+                input.disabled = false;
+                // Restaurar placeholder
+                input.placeholder = input.dataset.prevPh || 'Habla o escribe aquí...';
+            }
+            if (sendBtn) sendBtn.disabled = false;
+            if (micBtn) micBtn.disabled = false;
+
+            if (qa) {
+                qa.classList.remove('disabled');
+                if (showQuickActions) {
+                    qa.style.display = 'flex';
+                }
+            }
+            flushAutoSend();
+        }
+
+        // Evita enviar con Enter si está "escribiendo"
+        function handleKey(e) {
+            if (e.key === 'Enter') {
+                if (isTyping) return; // bloquea envío mientras SOPHIA escribe
+                send();
+            }
+        }
+
+
+        function sendQuickAction(type) {
+            const quick = document.getElementById('quickActions');
+            quick.style.display = "none";
+
+            if (type === 'reinicio_contrasena') {
+                document.getElementById("userInput").value = "Quiero un reinicio de contraseña";
+            }
+            if (type === 'desbloqueo_cuenta') {
+                document.getElementById("userInput").value = "Quiero desbloquear mi cuenta";
+            }
+            if (type === 'seguimiento_ticket') {
+                document.getElementById("userInput").value = "Quiero consultar el estatus de mi ticket";
+            }
+            if (type === 'contacto_soportec') {
+                document.getElementById("userInput").value = "¿Como puedo contactar a Soportec?";
+            }
+
+            send();
+        }
+
+
+        document.addEventListener('DOMContentLoaded', function () {
+            try {
+                // Asegúrate que Logos.html ya fue incluido y definió window.LOGOS
+                const img = document.getElementById('logo-soportec');
+                if (img && window.LOGOS && window.LOGOS.SOPORTEC) {
+                    img.src = window.LOGOS.SOPORTEC;
+                } else {
+                    console.warn('Logo no disponible o elemento no encontrado.');
+                }
+            } catch (e) {
+                console.error('Error al asignar logo:', e);
+            }
         });
-    } catch (error) {
-        console.error("Error en user-profile:", error.message);
-        res.json({ displayName: req.user.name.givenName, email: req.user.emails[0].value });
-    }
-});
 
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'], prompt: 'select_account' }));
-app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/auth/google' }), (req, res) => res.redirect('/'));
-app.get('/logout', (req, res) => { req.logout(() => res.redirect('/')); });
-
-app.get('/', isAuth, (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-app.use(express.static(path.join(__dirname, 'public')));
-
-const CFG = {
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-    MODEL_ID: process.env.MODEL_ID || "gemini-1.5-flash",
-    BMC_REST_URL: process.env.BMC_REST_URL,
-    BMC_USERNAME: process.env.BMC_USERNAME,
-    BMC_PASSWORD: process.env.BMC_PASSWORD,
-    UM_RESET_URL: process.env.UM_RESET_URL,
-    UM_BEARER_TOKEN: process.env.UM_BEARER_TOKEN,
-    GCLOUD_TTS_API_KEY: process.env.GCLOUD_TTS_API_KEY
-};
-
-const messageHistory = new Map();
-const MAX_TURNS = 12;
-
-function loadHistory(chatId) { return messageHistory.get(chatId) || []; }
-function saveHistory(chatId, history) {
-    if (history.length > MAX_TURNS) history = history.slice(history.length - MAX_TURNS);
-    messageHistory.set(chatId, history);
-}
-function appendToHistory(chatId, role, text) {
-    const history = loadHistory(chatId);
-    history.push({ role, parts: [{ text }] });
-    saveHistory(chatId, history);
-}
-
-// --- UNIFIED SYSTEM PROMPT (Consolidado desde AppScript) ---
-function getContextSophia(displayName) {
-    // Normalización del nombre (Primera Mayúscula, resto minúsculas)
-    const firstName = displayName.split(' ')[0].charAt(0).toUpperCase() + displayName.split(' ')[0].slice(1).toLowerCase();
-
-    const texto = `Eres SOPHIA, un asistente virtual corporativo experto en ITSM. Siempre habla en femenino (ej. "quedo atenta", "estoy lista").
-
-    TU OBJETIVO:
-    Recibir datos técnicos de un ticket o procesos de cuenta y presentarlos al usuario de forma ejecutiva, limpia y amigable. Siempre con actitud de servicio.
-
-    REGLA DE TRATO:
-    - Dirígete siempre al usuario por su nombre como **${firstName}** en cada respuesta. 
-    - Sin emojis. Tono profesional y amable. 
-    - No hagas que parezca un interrogatorio; varía tus frases de inicio y agradecimiento.
-    - SUPER IMPORTANTE: Si el usuario habla en inglés, responde en inglés (traduce etiquetas y campos).
-
-    REGLAS DE FORMATO (OBLIGATORIAS):
-    1. NUNCA muestres estructura JSON, llaves {} o comillas.
-    2. Usa Markdown para negritas (**texto**).
-    3. Si el 'Estatus' es 'Assigned', tradúcelo a 'Asignado'.
-    4. Nunca respondas con el ticket completo; si es INC000000007910, refiérete a él como INC7910 (quita los ceros de en medio).
-
-    --- CAPACIDAD 1: CONSULTA DE TICKETS ---
-    - Los tickets son INC + 12 dígitos. Si dan terminación (ej. 1730), rellena ceros hasta 12 dígitos para la función.
-    - No respondas hasta ejecutar la función de búsqueda.
-    - PLANTILLA DE RESPUESTA:
-      "Claro, ${firstName}, estos son los detalles del ticket solicitado:
-      **Resumen:** [Resumen con tus palabras de los datos técnicos]
-      **Ticket:** [ID sin ceros de en medio]
-      **Estado:** [Estatus traducido]
-      **Asignado a:** [Grupo/Agente]
-      **Fecha:** [Fecha formateada como '3 de enero de 2025']
-      **Detalles:** [Descripción o Solución]"
-
-    --- CAPACIDAD 2: RESETEO DE CONTRASEÑA ---
-    - Pide los datos UNO POR UNO, a menos que el usuario pida la lista completa.
-    - ETIQUETAS A USAR (Pide estos datos exactos):
-      • "Reinicio o desbloqueo de cuenta" (Valores API: RESETEO o DESBLOQUEO).
-      • "Número de empleado"
-      • "Correo electrónico corporativo" (Solo @liverpool.com.mx o @suburbia.com.mx).
-      • "Lugar de nacimiento"
-      • "RFC con homoclave"
-      • "Aplicación"
-      • "Usuario de acceso"
-    - LOGICA DE APLICACIONES:
-      - Si mencionan aplicaciones de "Directorio Activo" (Citrix, VPN, Windows, WiFi, etc.), usa 'Directorio Activo' para la API e indica que solo aplica RESETEO.
-      - Para SAP (EWM, Fiori, S4hana), envía el nombre tal cual.
-    - FINALIZACIÓN: Cuando falte solo el ÚLTIMO dato, indica que el proceso tomará un minuto. Tras el éxito, informa que la contraseña fue enviada al buzón.
-
-    SEGURIDAD Y FUERA DE ALCANCE:
-    - Contacto Soportec: Teléfono 4425006484 o WhatsApp 5550988688.
-    - Requerimientos: https://epl-dwp.onbmc.com/
-    - No inventes datos. Si no tienes la información, pídela.
-
-    REGLA DE EJECUCIÓN:
-    - No digas "permíteme" o "dame un momento". Llama a la herramienta inmediatamente sin texto previo.
-    - REGLA DE ESTADO: No afirmes tener datos personales si el usuario no los dio en esta conversación específica.`;
-
-    return { parts: [{ text: texto }] };
-}
+        document.addEventListener('DOMContentLoaded', function () {
+            try {
+                // Asegúrate que Logos.html ya fue incluido y definió window.LOGOS
+                const img = document.getElementById('logo-microfono');
+                if (img && window.LOGOS && window.LOGOS.MICROFONO) {
+                    img.src = window.LOGOS.MICROFONO;
+                } else {
+                    console.warn('Logo no disponible o elemento no encontrado.');
+                }
+            } catch (e) {
+                console.error('Error al asignar logo:', e);
+            }
+        });
 
 
-// --- HELPERS ---
-function normalizeIncidentId(raw) {
-    if (!raw) return raw;
-    let r = String(raw).toUpperCase().replace(/\s+/g, '');
-    const digits = r.replace(/\D/g, '');
-    return 'INC' + digits.padStart(12, '0');
-}
+        // Modo de dictado
+        let spellingMode = false;          // si true, parsea "be, ce, arroba, punto..."
+        let currentFieldMode = null;       // 'email' | 'rfc' | 'usuario' | 'employnumber' | null
 
-function filtrarDatosRelevantes(jsonCompleto) {
-    if (jsonCompleto.Error) return jsonCompleto;
-    return {
-        "Ticket ID": jsonCompleto["Incident Number"],
-        "Estatus": jsonCompleto["Status"],
-        "Asignado A": jsonCompleto["Assignee"],
-        "Resumen": jsonCompleto["Description"]
-    };
-}
+        // Card inline (confirmación)
+        let isConfirmCardOpen = false;
+        let confirmCardEl = null; // nodo DOM de la tarjeta activa
 
-async function generarResumenFinal(mensajeOriginal, datosJson, displayName) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${CFG.MODEL_ID}:generateContent?key=${CFG.GEMINI_API_KEY}`;
+        // --- 1. (Voice dropdown removed — now using Google Cloud TTS) ---
 
-    // Usamos el mismo prompt de sistema para que no pierda la personalidad de SOPHIA
-    const payload = {
-        system_instruction: getContextSophia(displayName),
-        contents: [{
-            role: "user",
-            parts: [{ text: `CONTEXTO: El usuario preguntó "${mensajeOriginal}". Registro JSON obtenido: ${JSON.stringify(datosJson)}. Genera el resumen siguiendo tus reglas de formato.` }]
-        }]
-    };
 
-    try {
-        const resp = await axios.post(url, payload);
-        return resp.data.candidates[0].content.parts[0].text;
-    } catch (e) {
-        return "No pude generar el resumen. Datos: " + JSON.stringify(datosJson);
-    }
-}
+        // --- 2. NORMALIZACIÓN / VALIDACIÓN PARA DICTADO ---
+        const WORD_TO_SYMBOL = [
+            { rx: /\barroba\b/gi, rep: '@' },
+            { rx: /\bpunto\b/gi, rep: '.' },
+            { rx: /\bguion\b/gi, rep: '-' },
+            { rx: /\bguion medio\b/gi, rep: '-' },
+            { rx: /\bguion bajo\b/gi, rep: '_' },
+            { rx: /\bespacio(s)?\b/gi, rep: '' },
+            { rx: /\bcoma\b/gi, rep: ',' },
+            { rx: /\b(doble\s*(u|ve|uve))\b/gi, rep: 'w' },
+            { rx: /\bcero\b/gi, rep: '0' },
+            { rx: /\buno\b/gi, rep: '1' },
+            { rx: /\bdos\b/gi, rep: '2' },
+            { rx: /\btres\b/gi, rep: '3' },
+            { rx: /\bcuatro\b/gi, rep: '4' },
+            { rx: /\bcinco\b/gi, rep: '5' },
+            { rx: /\bseis\b/gi, rep: '6' },
+            { rx: /\bsiete\b/gi, rep: '7' },
+            { rx: /\bocho\b/gi, rep: '8' },
+            { rx: /\bnueve\b/gi, rep: '9' }
+        ];
 
-async function loginBMC() {
-    const resp = await axios.post(`${CFG.BMC_REST_URL}/api/jwt/login`,
-        `username=${CFG.BMC_USERNAME}&password=${CFG.BMC_PASSWORD}`,
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-    );
-    return resp.data;
-}
-
-async function getIncidentData(incidentNumber) {
-    const jwt = await loginBMC();
-    const headers = { Authorization: `AR-JWT ${jwt}`, Accept: 'application/json' };
-    let qualification = `'Incident Number'="${incidentNumber}"`;
-    let url = `${CFG.BMC_REST_URL}/api/arsys/v1/entry/HPD:Help Desk?q=${encodeURIComponent(qualification)}`;
-    try {
-        let resp = await axios.get(url, { headers });
-        return resp.data.entries[0]?.values || { Error: "No encontrado" };
-    } catch (e) { return { Error: e.message }; }
-}
-
-app.post('/api/tts', isAuth, async (req, res) => {
-    try {
-        const { text, lang } = req.body;
-        const url = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${CFG.GCLOUD_TTS_API_KEY}`;
-        const payload = {
-            input: { text },
-            voice: { languageCode: lang || 'es-MX', ssmlGender: 'FEMALE' },
-            audioConfig: { audioEncoding: 'MP3' }
-        };
-        const resp = await axios.post(url, payload);
-        res.json({ audio: resp.data.audioContent, type: 'audio/mp3' });
-    } catch (error) {
-        console.error("Error en TTS:", error.message);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-app.post('/api/clear', isAuth, (req, res) => {
-    const { chatId } = req.body;
-    messageHistory.delete(chatId);
-    res.json({ status: "ok", message: "Historial limpiado" });
-});
-
-// --- API CHAT ---
-app.post('/api/chat', isAuth, async (req, res) => {
-    const { message, chatId, displayName } = req.body;
-    const history = loadHistory(chatId);
-    const lower = message.toLowerCase();
-    let intent = /inc|ticket|estatus/.test(lower) ? 'consulta' : (/reset|reinicio|contrase/.test(lower) ? 'reset' : null);
-
-    try {
-        // Fast track para tickets directos
-        const ticketMatch = message.match(/inc\s*0*\d+/i) || message.match(/\b\d{6,}\b/);
-        if (ticketMatch && intent === 'consulta') {
-            const rawData = await getIncidentData(normalizeIncidentId(ticketMatch[0]));
-            const summary = await generarResumenFinal(message, filtrarDatosRelevantes(rawData), displayName);
-            appendToHistory(chatId, "user", message);
-            appendToHistory(chatId, "model", summary);
-            return res.json({ tipo: "texto", respuesta: summary });
+        //  Quita puntuación final que el ASR agrega por “fin de frase”
+        function removeTrailingPunctuation(str) {
+            if (!str) return str;
+            return String(str)
+                .replace(/[.。]+$/g, '')   // puntos finales
+                .replace(/[,،]+$/g, '')    // comas finales
+                .replace(/[:：]+$/g, '')    // dos puntos finales
+                .replace(/\s+\.$/, '')     // espacio + punto final
+                .trim();
         }
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${CFG.MODEL_ID}:generateContent?key=${CFG.GEMINI_API_KEY}`;
-        const payload = {
-            system_instruction: getContextSophia(displayName || "Usuario"),
-            contents: history.concat([{ role: "user", parts: [{ text: message }] }]),
-            safetySettings: [
-                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-            ]
+        function normalizeDictation(text, mode = 'general') {
+            let t = (text || '').trim();
+            // Quita emojis/símbolos raros
+            t = t.replace(/[\u2700-\u27BF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDD00-\uDDFF]/g, '');
+
+            // Palabras -> símbolos (fallback por si llegó “arroba”, “punto”, etc.)
+            const WORD_TO_SYMBOL_INNER = [
+                { rx: /\barroba\b/gi, rep: '@' },
+                { rx: /\bpunto\b/gi, rep: '.' },
+                { rx: /\bguion\b/gi, rep: '-' },
+                { rx: /\bguion medio\b/gi, rep: '-' },
+                { rx: /\bguion bajo\b/gi, rep: '_' },
+                { rx: /\bespacio(s)?\b/gi, rep: '' }
+            ];
+            WORD_TO_SYMBOL_INNER.forEach(({ rx, rep }) => { t = t.replace(rx, rep); });
+
+            // Ajusta espacios alrededor de signos comunes en emails
+            t = t.replace(/\s*@\s*/g, '@')
+                .replace(/\s*\.\s*/g, '.')
+                .replace(/\s*-\s*/g, '-')
+                .replace(/\s*_\s*/g, '_');
+
+            if (mode === 'email') {
+                t = t.toLowerCase().replace(/\s+/g, '');
+            } else if (mode === 'rfc') {
+                t = t.toUpperCase().replace(/\s+/g, '').replace(/\./g, '');
+            } else {
+                t = t.replace(/\s{2,}/g, ' ').trim();
+            }
+            return t;
+        }
+
+        function isValidEmail(v) {
+            return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
+        }
+
+        function isValidRFC(v) {
+            const rePF = /^[A-ZÑ&]{4}\d{6}[A-Z0-9]{3}$/;
+            const rePM = /^[A-ZÑ&]{3}\d{6}[A-Z0-9]{3}$/;
+            return rePF.test(v) || rePM.test(v);
+        }
+
+        // --- Heurísticas rápidas para validar el contenido frente al modo ---
+
+        function looksLikeEmail(v) {
+            const s = String(v || '').trim().toLowerCase();
+            return /@/.test(s) && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s);
+        }
+
+        function looksLikeEmployeeNumber(v) {
+            const s = String(v || '').trim();
+            // Solo dígitos y mínimo 4 (ajusta si en tu empresa usan 6/8/10)
+            return /^\d{4,}$/.test(s);
+        }
+
+        function looksLikePlaceOfBirth(v) {
+            const s = String(v || '').trim().toLowerCase();
+            // palabras, sin @ ni muchos dígitos, corta (lugar típico)
+            return !/@/.test(s) && /[a-záéíóúñü]/i.test(s) && s.length <= 30 && !/\d{3,}/.test(s);
+        }
+
+        function inferModeFromContent(v) {
+            if (looksLikeEmail(v)) return 'email';
+            if (looksLikeEmployeeNumber(v)) return 'employnumber';
+            // no inferimos RFC por contenido aquí (puede ser confuso), lo manejamos por modo declarado
+            return null;
+        }
+
+        /**
+         * Decide si abrir tarjeta según el modo ACTUAL y el valor.
+         * Si no cuadra, devuelve {open:false, fix:null|{mode,value}}
+         */
+        function shouldOpenForMode(mode, value) {
+            const s = (value || '').trim();
+
+            if (mode === 'email') {
+                if (!looksLikeEmail(s)) return { open: false, fix: null };
+                return { open: true, fix: null };
+            }
+            if (mode === 'employnumber') {
+                if (!looksLikeEmployeeNumber(s)) return { open: false, fix: null };
+                return { open: true, fix: null };
+            }
+            if (mode === 'rfc') {
+                // aquí solo filtramos casos evidentemente no RFC
+                if (/@/.test(s)) return { open: false, fix: null };
+                return { open: true, fix: null };
+            }
+            if (mode === 'usuario') {
+                // usuario: permisivo, excepto si parece correo o puro número largo (evita confusión)
+                if (looksLikeEmail(s)) return { open: false, fix: { mode: 'email', value: s } };
+                if (looksLikeEmployeeNumber(s)) return { open: false, fix: { mode: 'employnumber', value: s } };
+                return { open: true, fix: null };
+            }
+
+            // Si no hay modo, intentamos inferir
+            const inferred = inferModeFromContent(s);
+            if (inferred) return { open: true, fix: { mode: inferred, value: s } };
+
+            // Ej. lugar de nacimiento u otros → no abrir tarjeta
+            return { open: false, fix: null };
+        }
+
+
+        function sendValueWithoutEcho(text) {
+            if (!text) return;
+
+            const sendBtn = document.getElementById('sendBtn');
+            const loader = document.getElementById('loading');
+            sendBtn.disabled = true;
+            loader.style.display = 'block';
+            scrollToBottom();
+
+            if (isListening && recognition) recognition.stop();
+
+            const chatId = getChatId();
+            callServer('procesarMensaje', text, chatId).then(response => {
+                sendBtn.disabled = false;
+                loader.style.display = 'none';
+                if (response.tipo === 'error') {
+                    addMessage(response.respuesta, 'error');
+                    speak("Hubo un error.");
+                } else {
+                    let html = response.respuesta
+                        .replace(/\n/g, '<br>')
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                    speak(response.respuesta, () => addBotMessageHtml(html));
+                }
+            }).catch(error => {
+                sendBtn.disabled = false;
+                loader.style.display = 'none';
+                addMessage("Error crítico: " + error.message, 'error');
+            });
+        }
+
+
+        // SOLETRAR (alfabeto y signos)
+        const SPELL_MAP = [
+            // Letras
+            ['a', 'a'], ['be', 'b'], ['b', 'b'], ['ve', 'v'], ['uve', 'v'], ['ce', 'c'], ['c', 'c'],
+            ['de', 'd'], ['e', 'e'], ['efe', 'f'], ['f', 'f'], ['ge', 'g'], ['g', 'g'],
+            ['hache', 'h'], ['h', 'h'], ['i', 'i'], ['jota', 'j'], ['k', 'k'], ['ka', 'k'],
+            ['ele', 'l'], ['elle', 'll'], ['ll', 'll'], ['l', 'l'],
+            ['eme', 'm'], ['m', 'm'], ['ene', 'n'], ['eñe', 'ñ'], ['ñ', 'ñ'],
+            ['o', 'o'], ['pe', 'p'], ['p', 'p'], ['cu', 'q'], ['q', 'q'],
+            ['erre', 'r'], ['ere', 'r'], ['r', 'r'], ['ese', 's'], ['s', 's'], ['te', 't'], ['t', 't'],
+            ['u', 'u'], ['uve doble', 'w'], ['doble ve', 'w'], ['doble u', 'w'], ['w', 'w'],
+            ['equis', 'x'], ['x', 'x'], ['ye', 'y'], ['i griega', 'y'], ['y', 'y'], ['zeta', 'z'], ['z', 'z'],
+
+            // Signos
+            ['arroba', '@'], ['punto', '.'], ['guion', '-'], ['guion medio', '-'], ['guion bajo', '_'], ['espacio', ' '],
+
+            // Números
+            ['cero', '0'], ['uno', '1'], ['dos', '2'], ['tres', '3'], ['cuatro', '4'],
+            ['cinco', '5'], ['seis', '6'], ['siete', '7'], ['ocho', '8'], ['nueve', '9']
+        ];
+
+        function hardcoreSplit(raw) {
+            return String(raw || '')
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // sin tildes
+                .toLowerCase()
+                // Inserta espacios entre cada carácter (letras y dígitos), preserva @ . _ -
+                .replace(/([a-z0-9])(?![@._-])/g, '$1 ')
+                .replace(/\s{2,}/g, ' ')
+                .trim();
+        }
+
+        function parseSpelling(text) {
+            const tokens = String(text || '')
+                .toLowerCase()
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                .split(/\s+/);
+
+            const out = [];
+            for (const tok of tokens) {
+                const pair = SPELL_MAP.find(([w]) => w === tok);
+                if (pair) out.push(pair[1]);
+                else out.push(tok);
+            }
+            return out.join('').replace(/\s+/g, '');
+        }
+
+        // ===== Tarjeta de confirmación inline =====
+
+
+        function closeConfirmCard() {
+            if (confirmCardEl && confirmCardEl.parentNode) {
+                confirmCardEl.parentNode.removeChild(confirmCardEl);
+            }
+            confirmCardEl = null;
+            isConfirmCardOpen = false;
+        }
+
+        function validateCardInput(inputEl, validate, normalize) {
+            const normalizeFn = normalize || (v => v);
+            const val = normalizeFn((inputEl.value || '').trim());
+            if (!validate) {
+                inputEl.classList.remove('valid', 'invalid');
+                return true;
+            }
+            const ok = !!validate(val);
+            inputEl.classList.toggle('valid', ok);
+            inputEl.classList.toggle('invalid', !ok);
+            return ok;
+        }
+
+
+
+        function openConfirmCard(cfg) {
+            // Cierra cualquier tarjeta previa
+            closeConfirmCard();
+
+            const messages = document.getElementById('messages');
+            const card = document.createElement('div');
+            card.className = 'msg user confirm-card';
+            card.setAttribute('tabindex', '-1');
+
+            const title = document.createElement('div');
+            title.className = 'confirm-title';
+            title.textContent = `Confirmar ${cfg.label || 'dato'}`;
+
+            const desc = document.createElement('div');
+            desc.className = 'confirm-desc';
+            desc.textContent = `Revisa y confirma tu ${(cfg.label || 'dato').toLowerCase()} dictado.`;
+
+            // Campo editable (permanece dentro de la burbuja)
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'confirm-input';
+            input.autocomplete = 'off';
+            input.value = cfg.value || '';
+
+            // Hint dinámico por tipo
+            const hint = document.createElement('div');
+            hint.className = 'confirm-hint';
+            const labelLower = (cfg.label || '').toLowerCase();
+            if (labelLower.includes('correo')) {
+                hint.textContent = 'Ejemplo: usuario@liverpool.com.mx';
+            } else if (labelLower.includes('rfc')) {
+                hint.textContent = 'Formato esperado: 13 caracteres, sin espacios.';
+            } else if (labelLower.includes('empleado')) {
+                hint.textContent = 'Verifica que los dígitos sean correctos.';
+            } else {
+                hint.textContent = '';
+            }
+
+            // Chips de sugerencias
+            const chips = document.createElement('div');
+            chips.className = 'confirm-chip-area';
+            const setChips = (list) => {
+                chips.innerHTML = '';
+                const base = (input.value || '').trim();
+                const uniq = [];
+                (list || []).forEach(v => {
+                    const t = (v || '').trim();
+                    if (!t || t === base) return;
+                    if (!uniq.includes(t)) uniq.push(t);
+                });
+                uniq.slice(0, 4).forEach(v => {
+                    const b = document.createElement('button');
+                    b.className = 'chip';
+                    b.textContent = v;
+                    b.title = 'Usar sugerencia';
+                    b.onclick = () => {
+                        input.value = v;
+                        validateCardInput(input, cfg.validate, cfg.normalize);
+                        requestAnimationFrame(autoResizeNow); // ⬅️ reauto‑size al elegir chip
+                    };
+                    chips.appendChild(b);
+                });
+            };
+            setChips(cfg.candidates || []);
+
+            // Acciones (Cancelar / Confirmar)
+            const actions = document.createElement('div');
+            actions.className = 'confirm-actions';
+
+            const btnCancel = document.createElement('button');
+            btnCancel.className = 'btn-inline secondary';
+            btnCancel.textContent = 'Cancelar';
+            btnCancel.onclick = () => {
+                closeConfirmCard();
+                setFieldMode(null, false);
+            };
+
+            const btnOk = document.createElement('button');
+            btnOk.className = 'btn-inline primary';
+            btnOk.textContent = 'Confirmar';
+            btnOk.onclick = () => {
+                const normalize = cfg.normalize || (v => v);
+                const validate = cfg.validate || null;
+                const val = normalize((input.value || '').trim());
+
+                if (validate && !validate(val)) {
+                    input.classList.add('invalid');
+                    input.focus();
+                    return;
+                }
+
+                // ✅ Convertir la tarjeta en “mensaje confirmado” (se queda en el hilo)
+                card.classList.add('confirmed');
+                title.textContent = `✔ ${cfg.label} confirmado`;
+                desc.textContent = 'Valor confirmado';
+
+                const valueEl = document.createElement('div');
+                valueEl.className = 'confirm-value';
+                valueEl.textContent = val;
+
+                // Sustituye el input por el valor final de sólo lectura
+                input.replaceWith(valueEl);
+                // Quita elementos interactivos
+                chips.remove();
+                actions.remove();
+                hint.remove();
+
+                // Estado: ya no hay tarjeta abierta
+                confirmCardEl = null;
+                isConfirmCardOpen = false;
+
+                //  Limpia el modo y envía al backend SIN eco (no crea otra burbuja)
+                setFieldMode(null, false);
+                if (typeof cfg.onConfirm === 'function') cfg.onConfirm(val);
+                else sendValueWithoutEcho(val);
+            };
+
+            // Ensamblado de la tarjeta
+            card.appendChild(title);
+            card.appendChild(desc);
+            card.appendChild(input);
+            card.appendChild(hint);
+            card.appendChild(chips);
+            actions.appendChild(btnCancel);
+            actions.appendChild(btnOk);
+            card.appendChild(actions);
+
+            messages.appendChild(card);
+
+            // Estado global de la card
+            confirmCardEl = card;
+            isConfirmCardOpen = true;
+
+            // ====== AUTO‑SIZE DEL INPUT (mirror medidor) ======
+            // Crea un span oculto que calcule el ancho real del texto con los mismos estilos
+            let mirror = null;
+            function attachAutoSizeToInput(el) {
+                // Crear mirror sólo una vez
+                mirror = document.createElement('span');
+                mirror.style.position = 'absolute';
+                mirror.style.visibility = 'hidden';
+                mirror.style.pointerEvents = 'none';
+                mirror.style.whiteSpace = 'pre';    // importante: respeta espacios
+                mirror.style.top = '-9999px';
+                mirror.style.left = '-9999px';
+
+                // Copiar estilos tipográficos relevantes del input
+                const cs = window.getComputedStyle(el);
+                [
+                    'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing',
+                    'textTransform', 'textIndent', 'textDecoration', 'textAlign', 'lineHeight'
+                ].forEach(p => { mirror.style[p.replace(/[A-Z]/g, m => '-' + m.toLowerCase())] = cs[p]; });
+
+                document.body.appendChild(mirror);
+
+                // Función que mide y ajusta ancho
+                autoResizeNow();
+                el.addEventListener('input', autoResizeNow);
+                el.addEventListener('change', autoResizeNow);
+                el.addEventListener('focus', autoResizeNow);
+                el.addEventListener('blur', autoResizeNow);
+
+                // Recalcular cuando cambie el ancho disponible (ej. responsive)
+                const ro = new ResizeObserver(() => autoResizeNow());
+                ro.observe(card);
+                // Guardar para limpiar si quieres (no es crítico aquí)
+                el._resizeObserver = ro;
+            }
+
+            function autoResizeNow() {
+                if (!mirror) return;
+                // Texto a medir (si está vacío, usa placeholder para un tamaño razonable)
+                const val = input.value || input.placeholder || '';
+                mirror.textContent = val;
+
+                // padding y bordes del input (en content-box, el padding no está incluido en width)
+                const style = window.getComputedStyle(input);
+                const paddingX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+                const borderX = parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
+
+                // Margen de seguridad para el caret y respiración visual
+                const safety = 10; // px
+
+                // Ancho ideal por contenido
+                const contentWidth = mirror.getBoundingClientRect().width;
+                let ideal = Math.ceil(contentWidth + paddingX + borderX + safety);
+
+                // Respetar min/max del CSS
+                const minW = parseFloat(style.minWidth) || 0;
+                const maxW = (() => {
+                    // max-width puede ser porcentaje. Usamos el ancho del contenedor real.
+                    const cardInner = input.closest('.confirm-card') || input.parentElement || document.body;
+                    const cardInnerWidth = cardInner.getBoundingClientRect().width;
+                    const maxCss = style.maxWidth; // puede ser '100%' o 'px'
+                    if (maxCss.endsWith('%')) {
+                        return cardInnerWidth * (parseFloat(maxCss) / 100);
+                    }
+                    const px = parseFloat(maxCss);
+                    return isNaN(px) ? cardInnerWidth : px;
+                })();
+
+                ideal = Math.max(ideal, minW || 0);
+                ideal = Math.min(ideal, maxW || ideal);
+
+                input.style.width = ideal + 'px';
+            }
+
+            // Activar autosize
+            attachAutoSizeToInput(input);
+
+            // Validación en vivo y atajos de teclado
+            validateCardInput(input, cfg.validate, cfg.normalize);
+            input.oninput = () => validateCardInput(input, cfg.validate, cfg.normalize);
+
+            card.onkeydown = (ev) => {
+                if (ev.key === 'Enter') btnOk.click();
+                if (ev.key === 'Escape') btnCancel.click();
+            };
+
+            // Focus + scroll
+            setTimeout(() => {
+                input.focus();
+                // Recalcular una vez que tiene foco y layout estable
+                requestAnimationFrame(autoResizeNow);
+                scrollToBottom();
+            }, 30);
+        }
+
+
+
+
+        // --- 3. RECONOCIMIENTO DE VOZ ---
+        function getBestTranscript(event) {
+            const alts = [];
+            for (let i = 0; i < event.results.length; i++) {
+                for (let j = 0; j < event.results[i].length; j++) {
+                    alts.push({
+                        text: event.results[i][j].transcript.trim(),
+                        confidence: event.results[i][j].confidence ?? 0
+                    });
+                }
+            }
+            alts.sort((a, b) => b.confidence - a.confidence);
+            return alts; // [{text, confidence}, ...]
+        }
+
+        function onVoiceFieldConfirmed(fieldName, value) {
+            const input = document.getElementById('userInput');
+            input.value = value;
+        }
+
+
+
+
+        function setFieldMode(mode, useSpelling) {
+            // Si cambia realmente de modo, limpiar el input para evitar arrastres
+            if (currentFieldMode !== mode) {
+                document.getElementById('userInput').value = '';
+            }
+
+            currentFieldMode = mode;
+            spellingMode = !!useSpelling;
+            const input = document.getElementById('userInput');
+            if (mode === 'email') input.placeholder = 'Habla o escribe aquí...';
+            else if (mode === 'rfc') input.placeholder = 'Habla o escribe aquí...';
+            else if (mode === 'usuario') input.placeholder = 'Habla o escribe aquí...';
+            else if (mode === 'employnumber') input.placeholder = 'Habla o escribe aquí...';
+            else input.placeholder = 'Habla o escribe aquí...';
+        }
+
+
+
+        // Quita etiquetas y normaliza espacios
+        function stripTags(html) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = html;
+            return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+        }
+
+        // Devuelve la línea más "relevante" del mensaje del bot:
+        // 1) Si hay preguntas (¿...? o ?), devuelve la última pregunta
+        // 2) Si no, devuelve la última línea que NO sea viñeta (*, -, •)
+        // 3) Fallback: el texto completo
+        function extractRelevantPromptFromBotHtml(botHtml) {
+            const plain = stripTags(botHtml);
+
+            // Cortar por saltos y también por signos de interrogación para aislar preguntas
+            // Mantenemos orden
+            const pieces = plain
+                .split(/\r?\n|<br\s*\/?>/i)
+                .map(s => s.trim())
+                .filter(Boolean);
+
+            if (pieces.length === 0) return plain;
+
+            // Buscar subfrases interrogativas dentro de cada línea
+            const questions = [];
+            for (const line of pieces) {
+                // Fragmentos que contengan interrogación
+                const qs = line.match(/[^?¿]*[¿][^?]+[?]|[^?¿]*[^¿][^?]+\?+/g);
+                if (qs) {
+                    qs.forEach(q => {
+                        const t = q.replace(/\s+/g, ' ').trim();
+                        if (t) questions.push(t);
+                    });
+                }
+            }
+            if (questions.length) {
+                return questions[questions.length - 1];
+            }
+
+            // Si no hay preguntas, tomar última línea NON-bullet
+            const nonBullets = pieces.filter(l => !/^\s*([*•\-–—])\s+/.test(l));
+            if (nonBullets.length) return nonBullets[nonBullets.length - 1];
+
+            // Fallback
+            return pieces[pieces.length - 1];
+        }
+
+
+        function detectFieldRequest(relevantTextOrHtml) {
+            if (isConfirmCardOpen) return; // No cambies modo mientras confirmas algo
+
+            const t = stripTags(relevantTextOrHtml || '').toLowerCase();
+
+            // Patrones típicos (ES/EN)
+            const asksEmail = /\b(correo|correo\s+electr[oó]nico(?:\s+corporativo)?|email|e-mail|mail)\b/.test(t);
+            const asksEmployee = /\b(n[uú]mero\s+de\s+empleado|employee\s+number)\b/.test(t);
+            const asksRFC = /\brfc\b/.test(t);
+            const asksUser = /\b(usuario\s+de\s+login|username|login\s+user|tu\s+usuario)\b/.test(t);
+            const asksPlaceOfBirth = /\b(lugar\s+de\s+nacimiento|place\s+of\s+birth)\b/.test(t);
+
+            //  PRIORIDAD dentro de la línea relevante:
+            // Si pide lugar de nacimiento → limpiar modo (no se requiere tarjeta)
+            if (asksPlaceOfBirth) { setFieldMode(null, false); return; }
+
+            if (asksEmail) { setFieldMode('email', true); return; }        // spelling ON
+            if (asksEmployee) { setFieldMode('employnumber', false); return; }
+            if (asksRFC) { setFieldMode('rfc', true); return; }
+            if (asksUser) { setFieldMode('usuario', true); return; }
+
+            // No intención fuerte → conserva el modo actual
+        }
+
+
+
+        // --- 4. RECONOCIMIENTO DE VOZ: configuración y eventos (AUTO-ES/EN) ---
+        try {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SpeechRecognition) {
+                recognition = new SpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                recognition.maxAlternatives = 5;
+
+                recognition.onstart = () => {
+                    // Fija idioma de arranque del dictado con base en lo último que escribió o habló el usuario
+                    recognition.lang = CURRENT_ASR_LANG;   // 'es-MX' o 'en-US'
+                    isListening = true;
+                    const mic = document.getElementById('micBtn');
+                    mic.classList.add('listening');
+
+                    const input = document.getElementById('userInput');
+                    input.placeholder =
+                        (CURRENT_ASR_LANG.startsWith('en')) ? 'Listening…' : 'Escuchando…';
+                };
+                recognition.onend = () => {
+                    isListening = false;
+                    const mic = document.getElementById('micBtn');
+                    mic.classList.remove('listening');
+
+
+                    const input = document.getElementById('userInput');
+                    const needsConfirm = ['email', 'rfc', 'usuario', 'employnumber'].includes(currentFieldMode);
+
+                    if (!needsConfirm && !isConfirmCardOpen) {
+                        const text = (input.value || '').trim();
+                        if (text.length > 0) {
+                            // ⬇️ encola y dispara cuando la UI esté libre
+                            queueAutoSend(text);
+                        }
+                    }
+                    input.placeholder = 'Habla o escribe aquí...';
+                };
+
+                recognition.onresult = (event) => {
+                    const alts = [];
+                    for (let i = 0; i < event.results.length; i++) {
+                        for (let j = 0; j < event.results[i].length; j++) {
+                            alts.push({
+                                text: event.results[i][j].transcript.trim(),
+                                confidence: event.results[i][j].confidence ?? 0
+                            });
+                        }
+                    }
+                    alts.sort((a, b) => b.confidence - a.confidence);
+
+                    // Texto "mejor" del dictado
+                    const bestRaw = removeTrailingPunctuation(alts[0]?.text || '');
+                    const bestText = (currentFieldMode && currentFieldMode !== 'general')
+                        ? normalizeDictation(
+                            spellingMode ? parseSpelling(hardcoreSplit(bestRaw)) : bestRaw,
+                            currentFieldMode === 'email' ? 'email'
+                                : (currentFieldMode === 'rfc' ? 'rfc' : 'general')
+                        )
+                        : bestRaw;
+
+                    // Asigna al input
+                    document.getElementById('userInput').value = bestText;
+
+                    //  Aprende idioma para el siguiente dictado
+                    const iso = detectLanguageFast(bestText);     // 'en'|'es'
+                    CURRENT_ASR_LANG = toBCP47(iso);              // 'en-US'|'es-MX'
+
+                    // Resto de tu lógica de tarjetas (email/RFC/usuario/empleado) permanece igual:
+                    // (si usas tarjetas al dictar, se dispara dentro de tu onresult original en ramas específicas)
+                };
+
+            } else {
+                document.getElementById('micBtn').style.display = 'none';
+            }
+        } catch (e) { console.error("Error Speech API", e); }
+
+
+        // --- 5. SISTEMA DE AUDIO (Google Cloud TTS via Backend) ---
+
+        // --- Estado global de audio ---
+        let audioUnlocked = false;
+        let pendingSpeakText = null;
+
+        function unlockAudioOnce() {
+            if (audioUnlocked) return;
+            try {
+                if (window.AudioContext || window.webkitAudioContext) {
+                    const AC = window.AudioContext || window.webkitAudioContext;
+                    const ctx = new AC();
+                    if (ctx.state === 'suspended') ctx.resume().catch(() => { });
+                }
+                const silent = new Audio(
+                    'data:audio/mp3;base64,//uQZAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA' +
+                    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+                );
+                silent.play().catch(() => { });
+                audioUnlocked = true;
+
+                if (pendingSpeakText) {
+                    const toSpeak = pendingSpeakText;
+                    pendingSpeakText = null;
+                    setTimeout(() => speak(toSpeak), 100);
+                }
+            } catch (e) {
+                console.warn('No se pudo desbloquear audio:', e);
+            }
+        }
+
+        function installAudioUnlockers() {
+            const once = () => {
+                unlockAudioOnce();
+                window.removeEventListener('click', once, true);
+                window.removeEventListener('keydown', once, true);
+                window.removeEventListener('pointerdown', once, true);
+                window.removeEventListener('touchstart', once, true);
+                window.removeEventListener('focus', once, true);
+            };
+            window.addEventListener('click', once, true);
+            window.addEventListener('keydown', once, true);
+            window.addEventListener('pointerdown', once, true);
+            window.addEventListener('touchstart', once, true);
+            window.addEventListener('focus', once, true);
+        }
+
+        window.addEventListener('DOMContentLoaded', installAudioUnlockers);
+
+
+        // Global playback ID to handle interruptions
+        let currentUtteranceId = 0;
+
+        // --- Control de TTS Toggle ---
+        let ttsEnabled = localStorage.getItem('sophia_tts_enabled') !== 'false';
+
+        function initTTSToggle() {
+            const cb = document.getElementById('ttsCheckbox');
+            if (cb) cb.checked = ttsEnabled;
+        }
+
+        function toggleTTS() {
+            const cb = document.getElementById('ttsCheckbox');
+            if (!cb) return;
+            // Si el click fue en el contenedor, invertimos el checkbox manualmente
+            // (A menos que el click ya fuera en el checkbox mismo)
+            if (event.target !== cb && event.target.className !== 'tts-slider') {
+                cb.checked = !cb.checked;
+            }
+            ttsEnabled = cb.checked;
+            localStorage.setItem('sophia_tts_enabled', ttsEnabled);
+        }
+
+        window.addEventListener('DOMContentLoaded', initTTSToggle);
+
+        async function speak(text, options = {}) {
+            const onStart = (typeof options === 'function') ? options : (options.onStart || (() => { }));
+            const onChunk = options.onChunk || null;
+            const onEnd = options.onEnd || (() => { });
+
+            if (!text) { onEnd(); return; }
+
+            const myId = ++currentUtteranceId;
+
+            // 2) Limpieza base
+            let cleanText = String(text || '')
+                .replace(/\*\*/g, '')
+                .replace(/[#*_]/g, '')
+                .replace(/INC0/gi, 'Ticket INC cero ')
+                .replace(/[\u2700-\u27BF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDD00-\uDDFF]/g, '');
+
+            // 3) Detener audio previo
+            isSpeaking = false;
+            try { if (!audioPlayer.paused) audioPlayer.pause(); } catch { }
+
+            // 4) Transformaciones solo-para-voz (emails, URLs, siglas)
+            const linkSafe = transformLinkLikeSegmentsForSpeech(cleanText);
+            const finalTxt = verbalizeAcronymsForSpeech(linkSafe);
+
+            // 5) Normalizar para TTS
+            const prepared = formatForGoogleTTS(finalTxt);
+            if (!prepared || prepared.trim().length === 0) {
+                onEnd();
+                return;
+            }
+
+            // --- MODO SILENCIO (TTS Off) ---
+            if (!ttsEnabled) {
+                onStart();
+                const sentences = prepared.split(/\n+/).filter(s => s.trim().length > 0);
+                for (let sentence of sentences) {
+                    if (myId !== currentUtteranceId) break;
+                    if (onChunk) {
+                        // Simular duración (aprox 120ms por carácter, máx 8 segundos por párrafo para no colgar)
+                        const simulatedDuration = Math.min(8000, sentence.length * 120);
+                        await onChunk(sentence, simulatedDuration);
+                    }
+                }
+                if (myId === currentUtteranceId) onEnd();
+                return;
+            }
+
+            // 6) Si audio no desbloqueado, encolar para después e intentar desbloqueo
+            if (!audioUnlocked) {
+                pendingSpeakText = prepared;
+                onStart();
+                return;
+            }
+
+            const langIso = detectLanguageFast(prepared);
+            const ttsLang = (langIso === 'en') ? 'en-US' : 'es-MX';
+
+            const sentences = prepared.split(/\n+/).filter(s => s.trim().length > 0);
+            if (sentences.length === 0 && prepared.trim().length > 0) sentences.push(prepared);
+
+            isSpeaking = true;
+
+            const audioPromises = sentences.map((sentence, index) => {
+                return new Promise((resolve) => {
+                    if (myId !== currentUtteranceId) return resolve(null);
+                    callServer('synthesizeSpeech', sentence, ttsLang).then(response => {
+                        if (typeof response === 'string') resolve({ audio: response, type: 'audio/wav', text: sentence });
+                        else resolve({ ...(response || {}), text: sentence });
+                    }).catch(err => {
+                        console.warn("TTS error chunk " + index, err);
+                        resolve(null);
+                    });
+                });
+            });
+
+            let started = false;
+            for (let i = 0; i < audioPromises.length; i++) {
+                if (myId !== currentUtteranceId) break;
+
+                const chunkData = await audioPromises[i];
+                if (!started) { onStart(); started = true; }
+                if (myId !== currentUtteranceId) break;
+
+                if (chunkData && chunkData.audio) {
+                    await playAudioChunk(chunkData, myId, (duration) => {
+                        if (onChunk) onChunk(chunkData.text, duration);
+                    });
+                } else if (onChunk && chunkData && chunkData.text) {
+                    onChunk(chunkData.text, chunkData.text.length * 75);
+                }
+            }
+
+            if (!started) onStart();
+            if (myId === currentUtteranceId) {
+                isSpeaking = false;
+                onEnd();
+            }
+        }
+
+        function playAudioChunk(chunkData, reqId, onDuration) {
+            return new Promise((resolve) => {
+                if (reqId !== currentUtteranceId) return resolve();
+
+                try {
+                    const mime = chunkData.type || 'audio/wav';
+                    const dataStr = chunkData.audio;
+                    audioPlayer.src = 'data:' + mime + ';base64,' + dataStr;
+
+                    audioPlayer.onloadedmetadata = () => {
+                        if (onDuration) onDuration(audioPlayer.duration * 1000);
+                    };
+
+                    audioPlayer.onended = () => resolve();
+                    audioPlayer.onerror = (e) => {
+                        console.warn("Audio error chunk", e);
+                        resolve();
+                    };
+
+                    const p = audioPlayer.play();
+                    if (p !== undefined) {
+                        p.catch(e => {
+                            console.warn("Autoplay bloqueado chunk", e);
+                            if (onDuration) onDuration(chunkData.text.length * 75);
+                            resolve();
+                        });
+                    }
+                } catch (e) {
+                    console.warn("Excepción audio chunk", e);
+                    resolve();
+                }
+            });
+        }
+
+
+        // ==================== DETECCIÓN Y ESTADO DE IDIOMA ====================
+        let CURRENT_ASR_LANG = 'es-MX';
+
+        function detectLanguageFast(text) {
+            const t = String(text || '').toLowerCase();
+            const enHits = (t.match(/\b(the|is|are|you|please|help|need|password|status|ticket)\b/g) || []).length;
+            const esHits = (t.match(/\b(el|la|los|para|necesito|contraseña|estatus|ticket|ayuda)\b/g) || []).length;
+            if (enHits > esHits) return 'en';
+            if (esHits > enHits) return 'es';
+            if (/[a-z]/.test(t) && /\b(the|is|are)\b/.test(t)) return 'en';
+            return 'es';
+        }
+
+        function toBCP47(lang) {
+            return (lang === 'en') ? 'en-US' : 'es-MX';
+        }
+
+
+        // ========= Detección y verbalización de emails/URLs =========
+        function isLikelyEmail(s) {
+            return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s);
+        }
+        function isLikelyURL(s) {
+            return /^(https?:\/\/[^\s]+)|([a-z0-9.-]+\.[a-z]{2,}(\/[^\s]*)?)$/i.test(s);
+        }
+
+        function verbalizeEmail(email) {
+            return String(email)
+                .replace(/@/g, ' arroba ')
+                .replace(/\./g, ' punto ')
+                .replace(/-/g, ' guion medio ')
+                .replace(/_/g, ' guion bajo ');
+        }
+
+        function verbalizeURL(url) {
+            const m = String(url).match(/^(https?):\/\/(.*)$/i);
+            let spoken = '';
+            if (m) {
+                const scheme = m[1].toLowerCase();
+                const schemeSpelled = scheme.split('').join(' ');
+                spoken += `${schemeSpelled} dos puntos slash slash `;
+                spoken += m[2]
+                    .replace(/\./g, ' punto ')
+                    .replace(/\//g, ' slash ')
+                    .replace(/-/g, ' guion medio ')
+                    .replace(/_/g, ' guion bajo ')
+                    .replace(/\?/g, ' signo de interrogación ')
+                    .replace(/#/g, ' numeral ')
+                    .replace(/&/g, ' ampersand ')
+                    .replace(/=/g, ' igual ');
+                return spoken.replace(/\s{2,}/g, ' ').trim();
+            }
+            return String(url)
+                .replace(/\./g, ' punto ')
+                .replace(/\//g, ' slash ')
+                .replace(/-/g, ' guion medio ')
+                .replace(/_/g, ' guion bajo ')
+                .replace(/\?/g, ' signo de interrogación ')
+                .replace(/#/g, ' numeral ')
+                .replace(/&/g, ' ampersand ')
+                .replace(/=/g, ' igual ')
+                .replace(/\s{2,}/g, ' ')
+                .trim();
+        }
+
+        function transformLinkLikeSegmentsForSpeech(input) {
+            const tokenRx = /((?:https?:\/\/[^\s]+)|(?:[^\s@]+@[^\s@]+\.[^\s@]{2,})|(?:[a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s]*)?))/ig;
+            return String(input).replace(tokenRx, (m) => {
+                const raw = m.trim();
+                if (isLikelyEmail(raw)) return verbalizeEmail(raw);
+                if (isLikelyURL(raw)) return verbalizeURL(raw);
+                return m;
+            });
+        }
+
+        // ========= Verbalización de siglas (TI => TE I) =========
+        function verbalizeAcronymsForSpeech(input) {
+            let t = String(input);
+            t = t.replace(
+                /(^|[\s(\[{"'¿¡«])T\.?\s*I\.?(?=($|[\s)\]}"'».,;:!?/\\]))/g,
+                (_, left) => `${left}TE I`
+            );
+            t = t.replace(
+                /(^|[\s(\[{"'¿¡«])T[\-\u2010\u2011\u2012\u2013\u2014]\s*I(?=($|[\s)\]}"'».,;:!?/\\]))/g,
+                (_, left) => `${left}TE I`
+            );
+            t = t.replace(
+                /(^|[\s(\[{"'¿¡«])T\s+I(?=($|[\s)\]}"'».,;:!?/\\]))/g,
+                (_, left) => `${left}TE I`
+            );
+            t = t.replace(
+                /(^|[\s(\[{"'¿¡«])TI(?=($|[\s)\]}"'».,;:!?/\\]))/g,
+                (_, left) => `${left}TE I`
+            );
+            return t;
+        }
+
+        // ========= Normalización de texto para TTS =========
+        function formatForGoogleTTS(input) {
+            let t = String(input || '');
+            // Personalización de pronunciación
+            t = t.replace(/liverpool/gi, 'liverpúl');
+
+            t = t.replace(/\b(N[º°o]\.?|No\.?|N°|Nº)\s*(de\s+|del\s+)?empleado\b/gi, 'Número de empleado');
+            t = t.replace(/\b(N[º°o]\.?|No\.?|N°|Nº)\s*(de\s+|del\s+)?tienda\b/gi, 'Número de tienda');
+            t = t.replace(/\b(N[º°o]\.?|No\.?|N°|Nº)\s*(?=\w|\d)/g, 'Número ');
+            t = t.replace(/^[\s]*[-–—_]{3,}[\s]*$/gm, ' … ');
+            t = t.replace(/[-–—]{2,}/g, ' – ');
+            t = t.replace(/\b(\d{5,})\b/g, (m) => m.split('').join(' '));
+            t = t.replace(/(n[uú]mero\s+de\s+empleado[:\s]*)(\d{2,})/gi,
+                (_, prefix, num) => `${prefix}${num.split('').join(' ')}`);
+            t = t.replace(/(employee\s+number[:\s]*)(\d{2,})/gi,
+                (_, prefix, num) => `${prefix}${num.split('').join(' ')}`);
+            t = t.replace(/\b(RFC[:\s]*)([A-Za-zÑ&]{3,4}\d{2,}[A-Za-z0-9]{0,})\b/gi,
+                (m, prefix, r) => {
+                    const r2 = r.replace(/\d{4,}/g, (n) => n.split('').join(' '));
+                    return `${prefix}${r2}`;
+                });
+            t = t.replace(/\bINC\s*0*([0-9]{3,})\b/gi,
+                (m, tail) => `INC ${tail.split('').join(' ')}`);
+            t = t.replace(/[ \t]{2,}/g, ' ')
+                .replace(/(\s*[.…]\s*){2,}/g, ' … ')
+                .trim();
+            return t;
+        }
+
+
+        // --- 6. UTILIDADES UI ---
+        function toggleVoice() {
+            if (!recognition) { alert("Navegador no compatible."); return; }
+            if (isListening) recognition.stop();
+            else recognition.start();
+        }
+        function handleKey(e) {
+            if (e.key === 'Enter') {
+                if (isTyping) return; // evita envío si el bot aún escribe
+                send();
+            }
+        }
+
+        function addMessage(text, type) {
+            const div = document.createElement('div');
+            div.className = 'msg ' + type;
+            div.textContent = text;
+            document.getElementById('messages').appendChild(div);
+            scrollToBottom();
+        }
+
+
+        function addBotMessageHtml(html, callbackWhenDone) {
+            const messages = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = 'msg bot';
+            messages.appendChild(div);
+
+            const finalHtml = html;
+            let isFinalized = false;
+
+            // Helper para obtener el siguiente "caramelo" (carácter o etiqueta)
+            function getTokens(html) {
+                const tokens = [];
+                let i = 0;
+                while (i < html.length) {
+                    if (html[i] === '<') {
+                        let end = html.indexOf('>', i);
+                        if (end !== -1) {
+                            tokens.push({ type: 'tag', content: html.substring(i, end + 1) });
+                            i = end + 1;
+                            continue;
+                        }
+                    }
+                    tokens.push({ type: 'text', content: html[i] });
+                    i++;
+                }
+                return tokens;
+            }
+
+            const tokens = getTokens(finalHtml);
+            let tokenIndex = 0;
+
+            return {
+                feed: function (textSegment, duration) {
+                    return new Promise(resolve => {
+                        if (isFinalized) return resolve();
+
+                        // Limpiamos espacios y medimos longitud visual para sincronizar
+                        const segmentClean = textSegment.trim();
+                        if (segmentClean.length === 0) {
+                            resolve();
+                            return;
+                        }
+
+                        // Estimamos cuántos caracteres de TEXTO (no tags) debemos revelar en este segmento
+                        // Usamos un contador relativo para no depender del match exacto de texto fonético vs html
+                        let segmentTokens = [];
+                        let charsInSegment = 0;
+
+                        // Consumimos tokens hasta agotar el buffer o encontrar un salto (si el segmento es corto)
+                        // Para SophIA, los segmentos suelen ser frases completas.
+                        const charDelay = (duration * 1.05) / (segmentClean.length || 1);
+
+                        function step() {
+                            if (isFinalized) return resolve();
+
+                            if (tokenIndex < tokens.length) {
+                                let token = tokens[tokenIndex];
+
+                                if (token.type === 'tag') {
+                                    div.innerHTML += token.content;
+                                    tokenIndex++;
+                                    step(); // Tags instantáneos
+                                } else {
+                                    div.innerHTML += token.content;
+                                    tokenIndex++;
+                                    charsInSegment++;
+                                    scrollToBottom();
+
+                                    // Si ya cubrimos la proporción del segmento, resolvemos
+                                    if (charsInSegment >= segmentClean.length) {
+                                        resolve();
+                                    } else {
+                                        setTimeout(step, charDelay);
+                                    }
+                                }
+                            } else {
+                                resolve();
+                            }
+                        }
+                        step();
+                    });
+                },
+                finalize: function () {
+                    if (isFinalized) return;
+                    isFinalized = true;
+                    div.classList.add('done');
+                    div.innerHTML = finalHtml;
+                    const relevant = extractRelevantPromptFromBotHtml(finalHtml);
+                    detectFieldRequest(relevant);
+                    scrollToBottom();
+                    if (callbackWhenDone) callbackWhenDone();
+                }
+            };
+        }
+
+
+        function scrollToBottom() {
+            const messages = document.getElementById('messages');
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+
+        // Mensaje de bienvenida (HTML) e inyección con TTS
+        function postWelcomeMessage() {
+            const firstName = userFullName.split(' ')[0].charAt(0).toUpperCase() + userFullName.split(' ')[0].slice(1).toLowerCase();
+            const saludoHtml = `¡Hola ${firstName}! soy Sophia, el asistente virtual de Soportec. Estoy aquí para agilizar tu día haciendo reinicios de contraseñas, desbloqueo de cuentas y consultando el estatus de tus tickets en tiempo real. ¿En que puedo ayudarte hoy?`;
+
+            lockUI({ hideQuickActions: true });
+            const loader = document.getElementById('loading');
+            if (loader) loader.style.display = 'block';
+
+            const plain = stripTags(saludoHtml);
+            const typewriter = addBotMessageHtml(saludoHtml);
+
+            speak(plain, {
+                onStart: () => {
+                    if (loader) loader.style.display = 'none';
+                },
+                onChunk: (text, duration) => {
+                    return typewriter.feed(text, duration);
+                },
+                onEnd: () => {
+                    typewriter.finalize();
+                    unlockUI({ showQuickActions: true });
+                }
+            });
+            scrollToBottom();
+        }
+
+    </script>
+
+    <script>
+        // --- CHAT ID Y ENVÍO ---
+        function getChatId() {
+            let id = sessionStorage.getItem('sophia_chat_id');
+            if (!id) {
+                id = (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + Math.random().toString(16).slice(2)));
+                sessionStorage.setItem('sophia_chat_id', id);
+            }
+            return id;
+        }
+
+        // Al iniciar, limpia el cache del servidor para este chatId
+        window.addEventListener('DOMContentLoaded', function () {
+            const chatId = getChatId();
+            callServer('clearConversation', chatId)
+                .catch(e => console.warn('No se pudo limpiar cache al cargar:', e));
+        });
+
+
+        // === Idioma (helpers GLOBALS, visibles para send/ASR/TTS) ===
+        window.CURRENT_ASR_LANG = 'es-MX';
+
+        window.detectLanguageFast = function (text) {
+            const t = String(text || '').toLowerCase();
+            const enHits = (t.match(/\b(the|is|are|you|please|help|need|password|status|ticket)\b/g) || []).length;
+            const esHits = (t.match(/\b(el|la|los|para|necesito|contraseña|estatus|ticket|ayuda)\b/g) || []).length;
+            if (enHits > esHits) return 'en';
+            if (esHits > enHits) return 'es';
+            if (/[a-z]/.test(t) && /\b(the|is|are)\b/.test(t)) return 'en';
+            return 'es';
         };
 
-        const geminiResp = await axios.post(url, payload);
-        const text = geminiResp.data.candidates[0].content.parts[0].text;
+        window.toBCP47 = function (lang) {
+            return (lang === 'en') ? 'en-US' : 'es-MX';
+        };
 
-        appendToHistory(chatId, "user", message);
-        appendToHistory(chatId, "model", text);
-        res.json({ tipo: "texto", respuesta: text });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
 
-app.listen(PORT, () => console.log(`SophIA Server running on port ${PORT}`));
+
+
+        function send() {
+            if (isTyping) return;
+            const input = document.getElementById('userInput');
+            const text = input.value.trim();
+            if (!text) return;
+            CURRENT_ASR_LANG = toBCP47(detectLanguageFast(text)); // ← requiere que toBCP47 exista
+
+            addMessage(text, 'user');
+            input.value = '';
+
+            const sendBtn = document.getElementById('sendBtn');
+            const loader = document.getElementById('loading');
+
+            // ⬇️ Bloquea la UI desde que empieza la petición
+            lockUI({ hideQuickActions: true });
+
+            sendBtn.disabled = true;
+            // Mostrar loader
+            // Si usas clases:
+            // loader.classList.add('is-visible');
+            // Si usas inline:
+            loader.style.display = 'block';
+            scrollToBottom();
+
+            if (isListening && recognition) recognition.stop();
+
+            const chatId = getChatId();
+            callServer('procesarMensaje', text, chatId).then(response => {
+                if (response.tipo === 'error') {
+                    loader.style.display = 'none';
+                    addMessage(response.respuesta, 'error');
+                    speak("Hubo un error.");
+                    unlockUI({ showQuickActions: false });
+                } else {
+                    let html = (response.respuesta || "")
+                        .replace(/\n/g, '<br>')
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+                    const typewriter = addBotMessageHtml(html);
+                    speak(response.respuesta, {
+                        onStart: () => {
+                            loader.style.display = 'none';
+                        },
+                        onChunk: (text, duration) => {
+                            return typewriter.feed(text, duration);
+                        },
+                        onEnd: () => {
+                            typewriter.finalize();
+                            unlockUI({ showQuickActions: false });
+                        }
+                    });
+                }
+            }).catch(error => {
+                loader.style.display = 'none';
+                addMessage("Error crítico: " + error.message, 'error');
+                unlockUI({ showQuickActions: false });
+            });
+        }
+    </script>
+
+
+    <script>
+        (function () {
+            const screen = document.getElementById("startScreen");
+            const btn = document.getElementById("siriAvatarBtn");
+            const core = btn?.querySelector(".siri-avatar-core");
+            const canvas = document.getElementById("startParticles");
+            const ctx = canvas?.getContext("2d", { alpha: true });
+
+            function doStart() {
+                //  Desbloquear audio
+                try {
+                    const silent = new Audio("data:audio/mp3;base64,//uQZAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA");
+                    silent.play().catch(() => { });
+                } catch (e) { }
+
+                // Ocultar pantalla
+                screen.classList.add("hidden");
+
+                // Lanzar bienvenida
+                setTimeout(() => {
+                    if (typeof postWelcomeMessage === "function") postWelcomeMessage();
+                }, 360);
+            }
+
+
+
+
+            // Anti‑flicker: activa transición tras el primer frame
+            requestAnimationFrame(() => { screen.style.transition = "opacity .45s ease"; });
+
+            // Click para iniciar
+            function doStartFallback() { screen.classList.add("hidden"); }
+            btn?.addEventListener("click", () => (typeof doStart === "function" ? doStart() : doStartFallback()));
+            btn?.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); btn.click(); } });
+
+            // Parallax sutil
+            document.addEventListener("mousemove", (e) => {
+                if (!core || screen.classList.contains("hidden")) return;
+                const rect = btn.getBoundingClientRect();
+                const dx = (e.clientX - (rect.left + rect.width / 2)) / rect.width;
+                const dy = (e.clientY - (rect.top + rect.height / 2)) / rect.height;
+                const gx = 40 + dx * 8, gy = 30 + dy * 8;
+                core.style.background = `radial-gradient(circle at ${gx}% ${gy}%, #c86aa7, #a14681 70%)`;
+            }, { passive: true });
+
+            if (!canvas || !ctx) {
+                console.error('[startParticles] Canvas o contexto no disponible');
+                return;
+            }
+
+            // ---------- DIMENSIONES CANVAS (forzamos tamaño real de viewport) ----------
+            let running = true, W = 0, H = 0, particles = [];
+            function resize() {
+                const sw = Math.max(1, Math.floor(window.innerWidth));
+                const sh = Math.max(1, Math.floor(window.innerHeight));
+
+                // Buffer interno = exactamente el viewport (sin escalar por DPR)
+                canvas.width = sw;
+                canvas.height = sh;
+
+                // Tamaño visual CSS
+                canvas.style.width = sw + 'px';
+                canvas.style.height = sh + 'px';
+
+                // Sin transform (muy importante)
+                // ctx.setTransform(1, 0, 0, 1, 0, 0); // no necesario si nunca lo cambias
+                W = sw;
+                H = sh;
+            }
+
+            window.addEventListener('resize', resize);
+            // Apps Script a veces no ha medido en el primer frame → reintentos
+            resize(); setTimeout(resize, 60); setTimeout(resize, 250);
+
+            // === SPRITE SUAVE PARA PARTÍCULAS (sin filtros CSS) ===
+            function makeParticleSprite(size = 96) {
+                const off = document.createElement('canvas');
+                off.width = off.height = size;
+                const ctx2 = off.getContext('2d');
+
+                const r = size / 2;
+                const g = ctx2.createRadialGradient(r, r, 0, r, r, r);
+                g.addColorStop(0.00, 'rgba(161,70,129,0.42)'); // centro
+                g.addColorStop(0.55, 'rgba(161,70,129,0.22)');
+                g.addColorStop(1.00, 'rgba(161,70,129,0.00)'); // borde
+
+                ctx2.fillStyle = g;
+                ctx2.beginPath();
+                ctx2.arc(r, r, r, 0, Math.PI * 2);
+                ctx2.fill();
+
+                return off;
+            }
+
+            let PARTICLE_SPRITE = null;
+
+            function drawSpriteClamped(ctx, sprite, cx, cy, sizePx, globalAlpha = 1) {
+                if (!sprite) return;
+
+                const cw = ctx.canvas.width;   // px del canvas (sin DPR)
+                const ch = ctx.canvas.height;
+
+                const half = sizePx / 2;
+                let dx = cx - half;
+                let dy = cy - half;
+                let dw = sizePx;
+                let dh = sizePx;
+
+                // Fuera de pantalla por completo → no dibujar
+                if (dx >= cw || dy >= ch || dx + dw <= 0 || dy + dh <= 0) return;
+
+                // Fuente completa
+                let sx = 0, sy = 0, sw = sprite.width, sh = sprite.height;
+
+                // Escalas (src -> dst)
+                const scaleX = dw / sw;
+                const scaleY = dh / sh;
+
+                // Clamp izquierda
+                if (dx < 0) {
+                    const cut = -dx;
+                    const cutSrc = cut / scaleX;
+                    sx += cutSrc; sw -= cutSrc; dx = 0; dw -= cut;
+                }
+                // Clamp arriba
+                if (dy < 0) {
+                    const cut = -dy;
+                    const cutSrc = cut / scaleY;
+                    sy += cutSrc; sh -= cutSrc; dy = 0; dh -= cut;
+                }
+                // Clamp derecha
+                if (dx + dw > cw) {
+                    const cut = (dx + dw) - cw;
+                    const cutSrc = cut / scaleX;
+                    sw -= cutSrc; dw -= cut;
+                }
+                // Clamp abajo
+                if (dy + dh > ch) {
+                    const cut = (dy + dh) - ch;
+                    const cutSrc = cut / scaleY;
+                    sh -= cutSrc; dh -= cut;
+                }
+
+                if (sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0) return;
+
+                ctx.globalAlpha = globalAlpha;
+                ctx.drawImage(sprite, sx, sy, sw, sh, dx, dy, dw, dh);
+                ctx.globalAlpha = 1;
+            }
+
+
+            function spawnParticle() {
+                if (!W || !H) return;
+
+                const SPAWN_PAD = 80; // 80–120 va bien
+                const side = Math.floor(Math.random() * 4);
+                let x, y;
+
+                if (side === 0) { x = -SPAWN_PAD; y = Math.random() * H; }
+                if (side === 1) { x = W + SPAWN_PAD; y = Math.random() * H; }
+                if (side === 2) { x = Math.random() * W; y = -SPAWN_PAD; }
+                if (side === 3) { x = Math.random() * W; y = H + SPAWN_PAD; }
+
+                const totalLife = 800 + Math.random() * 320;
+                const fadeTail = 140;
+
+                particles.push({
+                    x, y,
+                    size: 1.8 + Math.random() * 1.8,
+                    baseAlpha: 0.18 + Math.random() * 0.15,
+                    vx: (Math.random() - 0.5) * 0.95,
+                    vy: (Math.random() - 0.5) * 0.95,
+                    life: totalLife,
+                    lifeMax: totalLife,
+                    fadeTail
+                });
+
+                if (particles.length > 125) particles.shift();
+            }
+
+
+            // ---------- BUCLE ----------
+            let frames = 0, lastHUD = 0;
+
+            function tick(ts = 0) {
+                if (!running) return;
+                requestAnimationFrame(tick);
+
+                if (!W || !H) return;
+
+                // Limpia en coordenadas de buffer (1:1)
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Dibujo de partículas
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    const p = particles[i];
+
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.life--;
+
+                    const k = p.life <= p.fadeTail ? (p.life / p.fadeTail) : 1;
+                    const alpha = Math.max(0, Math.min(1, p.baseAlpha * k));
+
+                    // Escala visual (ajusta si las quieres más sutiles)
+                    const sizePx = p.size * 16;  // prueba 14 o 12 si prefieres
+
+                    drawSpriteClamped(ctx, PARTICLE_SPRITE, p.x, p.y, sizePx, alpha);
+
+                    if (p.life <= 0) particles.splice(i, 1);
+                }
+
+                while (particles.length < 80) spawnParticle();
+
+                frames++;
+                if (ts - lastHUD > 250) { lastHUD = ts; frames = 0; }
+            }
+
+            // Crear sprite antes de animar
+            PARTICLE_SPRITE = makeParticleSprite(96);
+
+            // Sembrar y arrancar
+            for (let i = 0; i < 60; i++) spawnParticle();
+            tick();
+
+            // Pausar/reanudar al ocultar
+            const mo = new MutationObserver(() => {
+                running = !screen.classList.contains("hidden");
+                if (running) tick();
+            });
+            mo.observe(screen, { attributes: true, attributeFilter: ["class"] });
+
+        })();
+    </script>
+    <script>
+        // --- NODE.JS BRIDGE ---
+        async function callServer(methodName, ...args) {
+            let endpoint = '/api/chat';
+            let body = {
+                method: methodName,
+                chatId: getChatId(),
+                displayName: userFullName
+            };
+
+            if (methodName === 'procesarMensaje') {
+                body.message = args[0];
+                body.chatId = args[1];
+            } else if (methodName === 'synthesizeSpeech') {
+                endpoint = '/api/tts';
+                body.text = args[0];
+                body.lang = args[1];
+            } else if (methodName === 'clearConversation') {
+                endpoint = '/api/clear';
+                body.chatId = args[0];
+            }
+
+            const resp = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (resp.status === 401) {
+                console.warn("Sesión expirada. Redirigiendo...");
+                window.location.reload();
+                return { tipo: "error", respuesta: "Tu sesión ha expirado, recargando..." };
+            }
+
+            return await resp.json();
+        }
+    </script>
+</body>
+
+</html>
