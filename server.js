@@ -120,7 +120,15 @@ function appendToHistory(chatId, role, content) {
 
 // --- UNIFIED SYSTEM PROMPT (Consolidado desde AppScript) ---
 function getContextSophia(displayName) {
-    const firstName = displayName.split(' ')[0].charAt(0).toUpperCase() + displayName.split(' ')[0].slice(1).toLowerCase();
+    let firstName = "Usuario";
+    try {
+        if (displayName && typeof displayName === 'string' && displayName.trim()) {
+            const part = displayName.split(' ')[0];
+            firstName = part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+        }
+    } catch (e) {
+        console.error("Error formatting firstName:", e.message);
+    }
 
     const texto = `Eres SOPHIA, un asistente virtual corporativo experto en ITSM.
 
@@ -308,9 +316,14 @@ app.post('/api/tts', isAuth, async (req, res) => {
         };
         const resp = await axios.post(url, payload);
         res.json({ audio: resp.data.audioContent, type: 'audio/mp3' });
-    } catch (error) {
-        console.error("Error en TTS:", error.message);
-        res.status(500).json({ error: error.message });
+    } catch (e) {
+        console.error("Error en TTS:", e.response?.data || e.message);
+        res.status(500).json({
+            tipo: "error",
+            respuesta: "Ocurrió un error interno al procesar tu solicitud.",
+            message: e.message,
+            detail: e.response?.data?.error?.message || "Sin detalles adicionales"
+        });
     }
 });
 
@@ -363,7 +376,7 @@ app.post('/api/chat', isAuth, async (req, res) => {
         const contents = history.concat([{ role: "user", parts: [{ text: message }] }]);
 
         const payload = {
-            system_instruction: getContextSophia(displayName || "Usuario"),
+            systemInstruction: getContextSophia(displayName || "Usuario"),
             contents,
             tools,
             safetySettings: [
@@ -403,7 +416,7 @@ app.post('/api/chat', isAuth, async (req, res) => {
 
             // Segunda llamada para resumir el resultado de la función
             const secondPayload = {
-                system_instruction: getContextSophia(displayName || "Usuario"),
+                systemInstruction: getContextSophia(displayName || "Usuario"),
                 contents: contents.concat([
                     { role: "model", parts: [part] },
                     {
@@ -443,7 +456,8 @@ app.post('/api/chat', isAuth, async (req, res) => {
     } catch (e) {
         console.error("Error en Chat:", e.response?.data || e.message);
         res.status(500).json({
-            error: "Error interno en el servidor",
+            tipo: "error",
+            respuesta: "Ocurrió un error interno al procesar tu solicitud.",
             message: e.message,
             detail: e.response?.data?.error?.message || "No hay más detalles"
         });
