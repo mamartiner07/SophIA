@@ -58,6 +58,8 @@ app.get('/api/user-profile', isAuth, (req, res) => {
         const firstName = req.user.name.givenName || "Usuario";
         const photo = req.user.photos && req.user.photos[0] ? req.user.photos[0].value : "";
 
+        console.log(`[Profile] Entregando datos de Google para: ${email}`);
+
         res.json({
             displayName: firstName,
             email: email,
