@@ -1071,32 +1071,29 @@
 </head>
 
 <body>
-<script>
-// --- BUSCA Y REEMPLAZA ESTA PARTE ---
-let userFullName = "Usuario"; // Valor por defecto
+    <script>
+        // --- BUSCA Y REEMPLAZA ESTA PARTE ---
+        let userFullName = "Usuario"; // Valor por defecto
 
-async function fetchGoogleProfile() {
-    try {
-        // Llamamos a tu API de Node.js que ya tiene la sesión de Google
-        const res = await fetch('/api/user-profile'); 
-        const data = await res.json();
-        
-        if (data.displayName) {
-            userFullName = data.displayName;
-            // Actualizamos el nombre en la interfaz (esquina superior derecha)
-            const nameElem = document.getElementById('user-display-name');
-            if (nameElem) nameElem.innerText = userFullName;
-            
-            console.log("Autenticado como:", userFullName);
+        async function fetchGoogleProfile() {
+            try {
+                const res = await fetch('/api/user-profile');
+                const data = await res.json();
+
+                if (data.displayName) {
+                    userFullName = data.displayName;
+                    const nameElem = document.getElementById('user-display-name');
+                    if (nameElem) nameElem.innerText = data.displayName;
+
+                    console.log("Autenticado como:", userFullName);
+                }
+            } catch (e) {
+                console.error("Error al obtener perfil de Google:", e);
+            }
         }
-    } catch (e) {
-        console.error("Error al obtener perfil de Google:", e);
-    }
-}
 
-// Ejecutar al cargar la página
-fetchGoogleProfile();
-</script>
+        fetchGoogleProfile();
+    </script>
 
     <!-- ===== START SCREEN ===== -->
     <div id="startScreen" class="start-screen" role="dialog" aria-modal="true">
@@ -1205,14 +1202,14 @@ fetchGoogleProfile();
     <script>
         // Al inicio de tu script de frontend
         let currentUser = "Usuario Demo";
-        
+
         async function fetchProfile() {
             const res = await fetch('/api/user-profile');
             const data = await res.json();
             currentUser = data.displayName;
             document.getElementById('user-name-display').innerText = currentUser; // Si tienes un elemento para el nombre
         }
-        
+
         fetchProfile();
         // --- VARIABLES GLOBALES ---
         let recognition = null;
@@ -2495,12 +2492,9 @@ fetchGoogleProfile();
 
         // Mensaje de bienvenida (HTML) e inyección con TTS
         function postWelcomeMessage() {
-            const nombre = (typeof USER_FIRST_NAME !== "undefined" && USER_FIRST_NAME?.trim())
-                ? USER_FIRST_NAME.trim()
-                : "usuario";
-
-            // Normalizar el saludo eliminando indentación de template literal
-            const saludoHtml = `¡Hola ${firstName}! soy Sophia, el asistente virtual de Soportec. Estoy aquí para agilizar tu día haciendo reinicios de contraseñas, desbloqueo de cuentas y consultando el estatus de tus tickets en tiempo real. ¿En que puedo ayudarte hoy?`;
+            const nombre = userFullName && userFullName.trim() ? userFullName.split(' ')[0] : "usuario";
+            
+            const saludoHtml = `¡Hola <strong>${nombre}</strong>! Soy Sophia, el asistente virtual de Soportec. Estoy aquí para agilizar tu día haciendo reinicios de contraseñas, desbloqueo de cuentas y consultando el estatus de tus tickets en tiempo real. ¿En qué puedo ayudarte hoy?`;
 
             lockUI({ hideQuickActions: true });
             const loader = document.getElementById('loading');
@@ -2523,7 +2517,6 @@ fetchGoogleProfile();
             });
             scrollToBottom();
         }
-
     </script>
 
     <script>
