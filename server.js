@@ -51,31 +51,21 @@ function isAuth(req, res, next) {
 app.use(cors());
 app.use(express.json());
 
-// --- NUEVA RUTA: Obtener Perfil desde Helix usando el correo de Google ---
-app.get('/api/user-profile', isAuth, async (req, res) => {
+// --- RUTA: Obtener Perfil desde Google Auth ---
+app.get('/api/user-profile', isAuth, (req, res) => {
     try {
         const email = req.user.emails[0].value;
-        const jwt = await loginBMC();
-        const headers = { Authorization: `AR-JWT ${jwt}`, Accept: 'application/json' };
-
-        // Consulta a CTM:People por correo electrónico
-        const qualification = `'Internet E-mail'="${email}"`;
-        const url = `${CFG.BMC_REST_URL}/api/arsys/v1/entry/CTM:People?q=${encodeURIComponent(qualification)}`;
-
-        const response = await axios.get(url, { headers });
-        const personData = response.data.entries[0]?.values;
-
-        // Extraemos el nombre o usamos el nombre de Google como respaldo
-        const firstName = personData ? personData['First Name'] : req.user.name.givenName;
+        const firstName = req.user.name.givenName || "Usuario";
+        const photo = req.user.photos && req.user.photos[0] ? req.user.photos[0].value : "";
 
         res.json({
             displayName: firstName,
             email: email,
-            photo: req.user.photos[0].value
+            photo: photo
         });
     } catch (error) {
         console.error("Error en user-profile:", error.message);
-        res.json({ displayName: req.user.name.givenName, email: req.user.emails[0].value });
+        res.status(500).json({ tipo: "error", respuesta: "No se pudo obtener el perfil de usuario." });
     }
 });
 
