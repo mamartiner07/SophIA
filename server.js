@@ -156,10 +156,10 @@ function getContextSophia(displayName) {
             **Ticket:** [ID del Ticket sin los 00000]
             **Estado:** [Estatus]
             **Asignado a:** [Grupo Asignado] (O el Agente si existe)
-            **Fecha:** [Fecha Reporte o de creación, si aplica]
+            **Fecha:** [Fecha Reporte formateada en texto (por ejemplo 3 de enero de 2025)]
 
             **Detalles:**
-           [Aquí pon la descripción detallada del campo 'Detalle', sé extenso y claro]
+           [Aquí pon la descripción detallada, o la Solución si está resuelto]
 
            ---
            NUEVA CAPACIDAD: RESETEO DE CONTRASEÑA
