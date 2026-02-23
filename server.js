@@ -95,7 +95,7 @@ const CFG = {
     BMC_REST_URL: process.env.BMC_REST_URL,
     BMC_USERNAME: process.env.BMC_USERNAME,
     BMC_PASSWORD: process.env.BMC_PASSWORD,
-    UM_RESET_URL: process.env.UM_RESET_URL,
+    UM_BASE_URL: process.env.UM_BASE_URL || "https://api.supporttsmx.com.mx",
     UM_BEARER_TOKEN: process.env.UM_BEARER_TOKEN,
     GCLOUD_TTS_API_KEY: process.env.GCLOUD_TTS_API_KEY
 };
@@ -169,12 +169,12 @@ function getContextSophia(displayName) {
              • action  → "Reinicio o desbloqueo de cuenta" (Si el usuario indica que es reinicio, reset, cambio de contraseña, el valor que envías a la API será RESETEO; si el usuario dice desbloquear o similares, deberás enviar DESBLOQUEO. Asesora al usuario indicando que si no recuerda su contraseña deberá pedir un reinicio de contraseña, y si la recuerda, deberá pedir un desbloqueo de cuenta. Si el usuario te pide directamente reinicio o un desbloqueo, ya no lo asesores y continúa con el flujo.)
              • employnumber → "número de empleado"
              • mail → "correo electrónico corporativo" (únicamente acepta correos con dominio @liverpool.com.mx o @suburbia.com.mx. Si el usuario te da un correo con otro dominio, indícale que no es válido y especifícale los formatos aceptados.)
-             • placeBirth → "lugar de nacimiento"
+             • curp → "CURP"
              • rfc → "RFC con homoclave"
              • sysapp → "aplicación"
              • user → "usuario de acceso"
 
-              - NO menciones los nombres técnicos del body (no digas "employnumber", "placeBirth", etc.). 
+              - NO menciones los nombres técnicos del body (no digas "employnumber", "curp", etc.). 
               - Si necesitas recordar al usuario qué falta, menciónalo con estas etiquetas en español.
 
              Si al preguntar la aplicación el usuario te indica alguna de estas opciones, el valor que debes mandar en el body tiene que ser "Directorio Activo" (Para la lista de Directorio Activo no se puede aplicar Desbloqueo; el sistema aplica desbloqueos de estas cuentas cada 30 minutos automáticamente, tú puedes hacer únicamente reseteo/reinicio de contraseña):
@@ -272,25 +272,56 @@ async function getIncidentData(incidentNumber) {
     } catch (e) { return { Error: e.message }; }
 }
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 async function ejecutarResetUM(payloadObj) {
+    const baseUrl = CFG.UM_BASE_URL;
+    const pathPost = "/RA/LIVERPOOL/setStarExecutionUM";
+    const pathGet = "/RA/LIVERPOOL/getExecutionUM";
+
+    const payload = {
+        action: String(payloadObj.action || "RESETEO").trim().toUpperCase(),
+        curp: String(payloadObj.curp || "").trim(),
+        employnumber: String(payloadObj.employnumber || "").trim(),
+        mail: String(payloadObj.mail || "").trim(),
+        rfc: String(payloadObj.rfc || "").trim(),
+        source: "sophia",
+        sysapp: String(payloadObj.sysapp || "").trim(),
+        user: String(payloadObj.user || "").trim()
+    };
+
     try {
-        const clean = {
-            action: String(payloadObj.action || "RESETEO").trim().toUpperCase(),
-            employnumber: String(payloadObj.employnumber || "").trim(),
-            mail: String(payloadObj.mail || "").trim(),
-            placeBirth: String(payloadObj.placeBirth || "").trim(),
-            rfc: String(payloadObj.rfc || "").trim(),
-            sysapp: String(payloadObj.sysapp || "").trim(),
-            user: String(payloadObj.user || "").trim()
-        };
+        const headers = { Authorization: `Bearer ${CFG.UM_BEARER_TOKEN}`, 'Content-Type': 'application/json' };
+        const postResp = await axios.post(`${baseUrl}${pathPost}`, payload, { headers });
+        const idExecution = postResp.data?.result?.idExecution;
 
-        const headers = {
-            Authorization: `Bearer ${CFG.UM_BEARER_TOKEN}`,
-            'Accept': 'application/json'
-        };
+        if (idExecution === undefined || idExecution === null) {
+            return { Error: "No se inició la ejecución", Detalle: postResp.data };
+        }
 
-        const resp = await axios.post(CFG.UM_RESET_URL, clean, { headers });
-        return resp.data;
+        let attempts = 0;
+        const maxAttempts = 20; // Reducido a 5 min (20 * 15s) por timeout de Cloud Run
+        const pollInterval = 15000;
+
+        while (attempts < maxAttempts) {
+            attempts++;
+            await sleep(pollInterval);
+
+            const getResp = await axios.get(`${baseUrl}${pathGet}?idExecution=${idExecution}`, { headers });
+            const j = getResp.data;
+
+            if (j.status === "success" && j.result && j.result.execution) {
+                const exec = j.result.execution;
+                if (exec.status === "failed" || exec.status === "success") {
+                    return {
+                        status: exec.status,
+                        incident: exec.incident,
+                        detail: exec.detail
+                    };
+                }
+            }
+        }
+        return { Error: "Timeout", Detalle: "La operación tomó más de 5 minutos." };
     } catch (e) {
         return { Error: "Fallo en Reseteo", Detalle: e.response?.data || e.message };
     }
@@ -358,14 +389,14 @@ app.post('/api/chat', isAuth, async (req, res) => {
                     type: "OBJECT",
                     properties: {
                         action: { type: "STRING", enum: ["RESETEO", "DESBLOQUEO"], description: "RESETEO (si no recuerda clave) o DESBLOQUEO (si la sabe pero está bloqueado)." },
+                        curp: { type: "STRING", description: "CURP del usuario (Obligatorio)." },
                         employnumber: { type: "STRING", description: "Número de empleado del usuario." },
                         mail: { type: "STRING", description: "Correo corporativo (@liverpool.com.mx o @suburbia.com.mx)." },
-                        placeBirth: { type: "STRING", description: "Lugar de nacimiento para validación." },
                         rfc: { type: "STRING", description: "RFC con homoclave." },
                         sysapp: { type: "STRING", description: "Nombre de la aplicación (ej. SAP EWM, Directorio Activo, VPN)." },
                         user: { type: "STRING", description: "ID de usuario de acceso/login." }
                     },
-                    required: ["action", "employnumber", "mail", "placeBirth", "rfc", "sysapp", "user"]
+                    required: ["action", "curp", "employnumber", "mail", "rfc", "sysapp", "user"]
                 }
             }
         ]
@@ -407,10 +438,14 @@ app.post('/api/chat', isAuth, async (req, res) => {
             } else if (name === "reset_contrasena_um") {
                 const umResp = await ejecutarResetUM(args);
                 if (umResp.Error) {
-                    resultData = { Error: "No se pudo completar el reseteo. Contacte a Soportec." };
+                    resultData = { Error: "No se pudo completar el reseteo. " + (umResp.Detalle || "Contacte a Soportec.") };
                 } else {
-                    const ticket = extraerTicketUM(umResp);
-                    resultData = { Status: "Éxito", Ticket: ticket || "Generado", Mensaje: "Contraseña enviada al buzón." };
+                    const ticket = umResp.incident || extraerTicketUM(umResp);
+                    resultData = {
+                        Status: umResp.status === "success" ? "Éxito" : "Fallido",
+                        Ticket: ticket || "Generado",
+                        Mensaje: umResp.detail || "Proceso finalizado correctamente."
+                    };
                 }
             }
 
