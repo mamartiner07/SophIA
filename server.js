@@ -108,9 +108,13 @@ function saveHistory(chatId, history) {
     if (history.length > MAX_TURNS) history = history.slice(history.length - MAX_TURNS);
     messageHistory.set(chatId, history);
 }
-function appendToHistory(chatId, role, text) {
+function appendToHistory(chatId, role, content) {
     const history = loadHistory(chatId);
-    history.push({ role, parts: [{ text }] });
+    if (typeof content === 'string') {
+        history.push({ role, parts: [{ text: content }] });
+    } else {
+        history.push({ role, parts: Array.isArray(content) ? content : [content] });
+    }
     saveHistory(chatId, history);
 }
 
@@ -372,8 +376,9 @@ app.post('/api/chat', isAuth, async (req, res) => {
 
         const geminiResp = await axios.post(url, payload);
         const candidates = geminiResp.data.candidates;
-        if (!candidates || candidates.length === 0) {
-            return res.json({ tipo: "texto", respuesta: "Lo siento, no pude procesar tu mensaje por reglas de seguridad de la IA. Por favor intenta con otras palabras." });
+        if (!candidates || candidates.length === 0 || !candidates[0].content) {
+            const reason = candidates?.[0]?.finishReason || "UNKNOWN";
+            return res.json({ tipo: "texto", respuesta: `Lo siento, la IA bloqueó la respuesta (Razón: ${reason}). Por favor intenta con otras palabras.` });
         }
 
         const candidate = candidates[0].content;
@@ -415,13 +420,18 @@ app.post('/api/chat', isAuth, async (req, res) => {
 
             const secondResp = await axios.post(url, secondPayload);
             const secondCandidates = secondResp.data.candidates;
-            if (!secondCandidates || secondCandidates.length === 0) {
-                return res.json({ tipo: "texto", respuesta: "Lo siento, la respuesta fue bloqueada por filtros de seguridad. El ticket/reseteo se procesó, pero no puedo mostrártelo así." });
+            if (!secondCandidates || secondCandidates.length === 0 || !secondCandidates[0].content) {
+                return res.json({ tipo: "texto", respuesta: "Lo siento, la respuesta final fue bloqueada por filtros de seguridad. El proceso se realizó correctamente pero no puedo describirlo." });
             }
             const finalBotText = secondCandidates[0].content.parts[0].text;
 
+            // Guardar toda la secuencia en el historial para mantener coherencia
             appendToHistory(chatId, "user", message);
-            appendToHistory(chatId, "model", finalBotText);
+            appendToHistory(chatId, "model", part); // Guarda la llamada a la función
+            appendToHistory(chatId, "function", {  // Guarda la respuesta de la función
+                functionResponse: { name, response: resultData }
+            });
+            appendToHistory(chatId, "model", finalBotText); // Guarda la respuesta final
             return res.json({ tipo: "texto", respuesta: finalBotText });
         }
 
@@ -431,8 +441,12 @@ app.post('/api/chat', isAuth, async (req, res) => {
         res.json({ tipo: "texto", respuesta: botText });
 
     } catch (e) {
-        console.error("Error en Chat:", e.message);
-        res.status(500).json({ error: "Ocurrió un error al procesar tu solicitud." });
+        console.error("Error en Chat:", e.response?.data || e.message);
+        res.status(500).json({
+            error: "Error interno en el servidor",
+            message: e.message,
+            detail: e.response?.data?.error?.message || "No hay más detalles"
+        });
     }
 });
 
