@@ -169,8 +169,15 @@ function getContextSophia(displayName) {
              • mail → "correo electrónico corporativo" (únicamente acepta correos con dominio @liverpool.com.mx o @suburbia.com.mx. Si el usuario te da un correo con otro dominio, indícale que no es válido y especifícale los formatos aceptados.)
              • curp → "CURP"
              • rfc → "RFC con homoclave"
-             • sysapp → "aplicación"
-             • user → "usuario de acceso"
+             • sysapp → "nombre de la aplicación"
+             • user → "ID de usuario o login"
+
+            REGLA CRÍTICA DE FLUJO (NUEVA):
+            1. Una vez que tengas TODOS los datos necesarios, NO llames a la función de herramienta inmediatamente.
+            2. En su lugar, presenta un resumen claro al usuario con todos los datos recolectados y pídele que valide si son correctos.
+            3. Informa en ese mismo mensaje que "Una vez que confirmes que los datos están bien, comenzaré el proceso y me tomará aproximadamente un minuto."
+            4. Solo cuando el usuario confirme explícitamente (ej: "Sí", "adelante", "están bien"), llama a la función 'reset_contrasena_um' pasando el parámetro 'confirmado: true'.
+            5. Si el usuario desea corregir algo, actualiza el dato y vuelve a pedir validación.
 
               - NO menciones los nombres técnicos del body (no digas "employnumber", "curp", etc.). 
               - Si necesitas recordar al usuario qué falta, menciónalo con estas etiquetas en español.
@@ -183,8 +190,8 @@ function getContextSophia(displayName) {
 
               Si el usuario te pregunta a qué aplicaciones tienes alcance, o ves que no sabe qué aplicación resetear, pregúntale si quiere saber el catálogo y si te dice que sí, le das la lista completa. No le indiques cómo las envías al backend.
 
-           - Cuando te falte únicamente un dato y lo pidas al usuario, indícale que después de que te comparta el dato faltante, comenzarás a realizar el desbloqueo y que te tomará aproximadamente un minuto.
-           - Cuando cuentes con TODOS los datos, llama a la función de herramienta para procesarlo. No inventes datos.
+            - Cuando te falte únicamente un dato y lo pidas al usuario, indícale qué falta amablemente.
+            - Cuando cuentes con TODOS los datos y el usuario los haya CONFIRMADO, llama a la función de herramienta para procesarlo. No inventes datos.
            - Tras la respuesta de la API, informa:
              • Muestra el **ticket** devuelto (si existe).
              • SI la solicitud fue un reseteo indica explícitamente que **la contraseña fue enviada al buzón proporcionado**. Si el reinicio de contraseña fue para alguna de las aplicaciones de Directorio Activo, indica que puede tardar hasta 30 minutos en replicar.
@@ -418,9 +425,10 @@ app.post('/api/chat', isAuth, async (req, res) => {
                         mail: { type: "STRING", description: "Correo corporativo (@liverpool.com.mx o @suburbia.com.mx)." },
                         rfc: { type: "STRING", description: "RFC con homoclave." },
                         sysapp: { type: "STRING", description: "Nombre de la aplicación (ej. SAP EWM, Directorio Activo, VPN)." },
-                        user: { type: "STRING", description: "ID de usuario de acceso/login." }
+                        user: { type: "STRING", description: "ID de usuario de acceso/login." },
+                        confirmado: { type: "BOOLEAN", description: "Debe ser TRUE solo si el usuario ya validó y confirmó los datos resumidos." }
                     },
-                    required: ["action", "curp", "employnumber", "mail", "rfc", "sysapp", "user"]
+                    required: ["action", "curp", "employnumber", "mail", "rfc", "sysapp", "user", "confirmado"]
                 }
             }
         ]
@@ -460,20 +468,24 @@ app.post('/api/chat', isAuth, async (req, res) => {
                 const raw = await getIncidentData(normalizeIncidentId(args.ticket_id));
                 resultData = filtrarDatosRelevantes(raw);
             } else if (name === "reset_contrasena_um") {
-                const umResp = await ejecutarResetUM(args);
-                if (umResp.Error) {
-                    resultData = {
-                        Status: "failed",
-                        Error: umResp.Error,
-                        Detalle: umResp.Detalle || "No se pudieron verificar los datos."
-                    };
+                if (args.confirmado !== true && args.confirmado !== "true") {
+                    resultData = { Error: "Debes presentar el resumen de datos al usuario y esperar su confirmación explícita antes de ejecutar esta acción." };
                 } else {
-                    const ticket = umResp.incident || extraerTicketUM(umResp);
-                    resultData = {
-                        Status: umResp.status, // "success" o "failed"
-                        Ticket: ticket || "Generado",
-                        Mensaje: umResp.detail || "Proceso finalizado."
-                    };
+                    const umResp = await ejecutarResetUM(args);
+                    if (umResp.Error) {
+                        resultData = {
+                            Status: "failed",
+                            Error: umResp.Error,
+                            Detalle: umResp.Detalle || "No se pudieron verificar los datos."
+                        };
+                    } else {
+                        const ticket = umResp.incident || extraerTicketUM(umResp);
+                        resultData = {
+                            Status: umResp.status, // "success" o "failed"
+                            Ticket: ticket || "Generado",
+                            Mensaje: umResp.detail || "Proceso finalizado."
+                        };
+                    }
                 }
             }
 
