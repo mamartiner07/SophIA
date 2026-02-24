@@ -209,125 +209,17 @@
             opacity: 0.95;
             padding: 4px 10px;
             border-radius: 20px;
+            /* Redondeado tipo píldora */
             background: rgba(255, 255, 255, 0.15);
             display: flex;
             align-items: center;
             gap: 10px;
             white-space: nowrap;
-            transition: all 0.2s;
-            cursor: pointer;
-            position: relative;
-            user-select: none;
+            transition: background 0.2s;
         }
 
         .user-email-panel:hover {
             background: rgba(255, 255, 255, 0.25);
-            transform: translateY(-1px);
-        }
-
-        .user-email-panel:active {
-            transform: translateY(0);
-        }
-
-        /* Popover de Perfil */
-        .user-popover {
-            position: absolute;
-            top: calc(100% + 10px);
-            right: 0;
-            width: 240px;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
-            border: 1.5px solid rgba(255, 255, 255, 0.2);
-            border-radius: 16px;
-            padding: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            z-index: 9999 !important;
-            /* Aumentado sustancialmente */
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            gap: 15px;
-            animation: fadeInSlide 0.3s ease-out;
-        }
-
-        .user-popover.active {
-            display: flex;
-        }
-
-        @keyframes fadeInSlide {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .popover-avatar {
-            width: 64px;
-            height: 64px;
-            border-radius: 50%;
-            border: 2px solid var(--accent);
-            object-fit: cover;
-        }
-
-        .popover-initials {
-            width: 64px;
-            height: 64px;
-            border-radius: 50%;
-            background: var(--accent);
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            font-weight: 700;
-            border: 2px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .popover-info {
-            text-align: center;
-        }
-
-        .popover-name {
-            display: block;
-            font-size: 16px;
-            font-weight: 700;
-            color: white;
-            margin-bottom: 4px;
-        }
-
-        .popover-email {
-            display: block;
-            font-size: 12px;
-            color: rgba(255, 255, 255, 0.7);
-            word-break: break-all;
-        }
-
-        .logout-btn {
-            width: 100%;
-            padding: 10px;
-            border-radius: 10px;
-            border: none;
-            background: rgba(255, 59, 48, 0.2);
-            color: #ff3b30;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s, color 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-
-        .logout-btn:hover {
-            background: rgba(255, 59, 48, 0.3);
-            color: #ff453a;
         }
 
         .user-avatar-container {
@@ -1279,6 +1171,54 @@
 </head>
 
 <body>
+    <script>
+        // --- BUSCA Y REEMPLAZA ESTA PARTE ---
+        let userFullName = "Usuario"; // Valor por defecto
+
+        async function fetchGoogleProfile() {
+            try {
+                const res = await fetch('/api/user-profile');
+                const data = await res.json();
+
+                if (data.displayName) {
+                    userFullName = data.displayName;
+                    const nameElem = document.getElementById('user-display-name');
+                    if (nameElem) nameElem.innerText = userFullName;
+
+                    // Gestionar Foto / Iniciales
+                    const photoElem = document.getElementById('user-photo');
+                    const initialsElem = document.getElementById('user-initials');
+
+                    if (data.photo && data.photo.trim() !== "") {
+                        if (photoElem) {
+                            photoElem.src = data.photo;
+                            photoElem.style.display = 'block';
+                        }
+                        if (initialsElem) initialsElem.style.display = 'none';
+                    } else {
+                        if (photoElem) photoElem.style.display = 'none';
+                        if (initialsElem) {
+                            // Generar iniciales del nombre
+                            const parts = userFullName.split(' ').filter(p => p.length > 0);
+                            let initials = "U";
+                            if (parts.length >= 2) initials = (parts[0][0] + parts[1][0]).toUpperCase();
+                            else if (parts.length === 1) initials = parts[0][0].toUpperCase();
+
+                            initialsElem.innerText = initials;
+                            initialsElem.style.display = 'flex';
+                        }
+                    }
+
+                    console.log("Autenticado como:", userFullName);
+                }
+            } catch (e) {
+                console.error("Error al obtener perfil de Google:", e);
+            }
+        }
+
+        // Ejecutar al cargar la página
+        fetchGoogleProfile();
+    </script>
 
     <!-- ===== START SCREEN ===== -->
     <div id="startScreen" class="start-screen" role="dialog" aria-modal="true">
@@ -1325,7 +1265,7 @@
                             <span class="tts-slider"></span>
                         </label>
                     </div>
-                    <div id="user-email" class="user-email-panel" onclick="togglePopover(event)">
+                    <div id="user-email" class="user-email-panel">
                         <div class="user-avatar-container">
                             <img id="user-photo" src="" alt="" class="user-avatar" style="display:none;">
                             <div id="user-initials" class="user-initials" style="display:none;">U</div>
@@ -1334,32 +1274,13 @@
                         <span id="user-display-name">
                             Usuario
                         </span>
-
-                        <!-- Popover -->
-                        <div id="user-popover" class="user-popover">
-                            <img id="popover-photo" src="" alt="" class="popover-avatar" style="display:none;">
-                            <div id="popover-initials" class="popover-initials" style="display:none;">U</div>
-                            <div class="popover-info">
-                                <span id="popover-name" class="popover-name">Usuario</span>
-                                <span id="popover-email" class="popover-email">correo@liverpool.com.mx</span>
-                            </div>
-                            <button class="logout-btn" onclick="logout()">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                                    <polyline points="16 17 21 12 16 7"></polyline>
-                                    <line x1="21" y1="12" x2="9" y2="12"></line>
-                                </svg>
-                                Cerrar Sesión
-                            </button>
-                        </div>
                     </div>
                 </div>
             </div>
             <div class="header-spacer"></div>
         </div>
 
-        <!--CONTENIDO -->
+        <!-- CONTENIDO -->
         <div class="content">
 
             <div id="messages"></div>
@@ -1403,8 +1324,9 @@
             © 2026 · Developed by Soportec · Powered by Gemini
         </div>
 
-    </div>
-    <!-- /chat-wrapper -->
+
+    </div> <!-- /chat-wrapper -->
+
 
     <script>
         // --- VARIABLES GLOBALES ---
@@ -1429,14 +1351,14 @@
             if (!input) return;
 
             input.value = pendingAutoSend;
-            pendingAutoSend = null; // limpiar para no enviar doble
-            send(); // ahora sí, con isTyping=false
+            pendingAutoSend = null;   // limpiar para no enviar doble
+            send();                   // ahora sí, con isTyping=false
         }
 
 
 
         // ======= CONTROL DE UI DURANTE "ESCRIBIENDO" =======
-        let isTyping = false; // estado global
+        let isTyping = false;  // estado global
 
         function lockUI({ hideQuickActions = true } = {}) {
             isTyping = true;
@@ -1551,8 +1473,8 @@
 
 
         // Modo de dictado
-        let spellingMode = false; // si true, parsea "be, ce, arroba, punto..."
-        let currentFieldMode = null; // 'email' | 'rfc' | 'usuario' | 'employnumber' | null
+        let spellingMode = false;          // si true, parsea "be, ce, arroba, punto..."
+        let currentFieldMode = null;       // 'email' | 'rfc' | 'usuario' | 'employnumber' | null
 
         // Card inline (confirmación)
         let isConfirmCardOpen = false;
@@ -1587,19 +1509,17 @@
         function removeTrailingPunctuation(str) {
             if (!str) return str;
             return String(str)
-                .replace(/[.。]+$/g, '') // puntos finales
-                .replace(/[,،]+$/g, '') // comas finales
-                .replace(/[:：]+$/g, '') // dos puntos finales
-                .replace(/\s+\.$/, '') // espacio + punto final
+                .replace(/[.。]+$/g, '')   // puntos finales
+                .replace(/[,،]+$/g, '')    // comas finales
+                .replace(/[:：]+$/g, '')    // dos puntos finales
+                .replace(/\s+\.$/, '')     // espacio + punto final
                 .trim();
         }
 
         function normalizeDictation(text, mode = 'general') {
             let t = (text || '').trim();
             // Quita emojis/símbolos raros
-            t =
-                t.replace(/[\u2700-\u27BF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDD00-\uDDFF]/g,
-                    '');
+            t = t.replace(/[\u2700-\u27BF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDD00-\uDDFF]/g, '');
 
             // Palabras -> símbolos (fallback por si llegó “arroba”, “punto”, etc.)
             const WORD_TO_SYMBOL_INNER = [
@@ -1651,18 +1571,26 @@
             return /^\d{4,}$/.test(s);
         }
 
+        function looksLikePlaceOfBirth(v) {
+            const s = String(v || '').trim().toLowerCase();
+            // palabras, sin @ ni muchos dígitos, corta (lugar típico)
+            return !/@/.test(s) && /[a-záéíóúñü]/i.test(s) && s.length <= 30 && !/\d{3,}/.test(s);
+        }
+
         function inferModeFromContent(v) {
             if (looksLikeEmail(v)) return 'email';
             if (looksLikeEmployeeNumber(v)) return 'employnumber';
+            // no inferimos RFC por contenido aquí (puede ser confuso), lo manejamos por modo declarado
             return null;
         }
 
         /**
-        * Decide si abrir tarjeta según el modo ACTUAL y el valor.
-        * Si no cuadra, devuelve {open:false, fix:null|{mode,value}}
-        */
+         * Decide si abrir tarjeta según el modo ACTUAL y el valor.
+         * Si no cuadra, devuelve {open:false, fix:null|{mode,value}}
+         */
         function shouldOpenForMode(mode, value) {
             const s = (value || '').trim();
+
             if (mode === 'email') {
                 if (!looksLikeEmail(s)) return { open: false, fix: null };
                 return { open: true, fix: null };
@@ -1677,7 +1605,7 @@
                 return { open: true, fix: null };
             }
             if (mode === 'usuario') {
-                // usuario: permisivo, excepto si parece correo o puro número largo
+                // usuario: permisivo, excepto si parece correo o puro número largo (evita confusión)
                 if (looksLikeEmail(s)) return { open: false, fix: { mode: 'email', value: s } };
                 if (looksLikeEmployeeNumber(s)) return { open: false, fix: { mode: 'employnumber', value: s } };
                 return { open: true, fix: null };
@@ -1687,12 +1615,23 @@
             const inferred = inferModeFromContent(s);
             if (inferred) return { open: true, fix: { mode: inferred, value: s } };
 
+            // Ej. lugar de nacimiento u otros → no abrir tarjeta
             return { open: false, fix: null };
         }
+
+
         function sendValueWithoutEcho(text) {
-            if (!text) return; const sendBtn = document.getElementById('sendBtn'); const
-                loader = document.getElementById('loading'); sendBtn.disabled = true; loader.style.display = 'block';
-            scrollToBottom(); if (isListening && recognition) recognition.stop(); const chatId = getChatId();
+            if (!text) return;
+
+            const sendBtn = document.getElementById('sendBtn');
+            const loader = document.getElementById('loading');
+            sendBtn.disabled = true;
+            loader.style.display = 'block';
+            scrollToBottom();
+
+            if (isListening && recognition) recognition.stop();
+
+            const chatId = getChatId();
             callServer('procesarMensaje', text, chatId).then(response => {
                 sendBtn.disabled = false;
                 loader.style.display = 'none';
@@ -1724,12 +1663,10 @@
             ['o', 'o'], ['pe', 'p'], ['p', 'p'], ['cu', 'q'], ['q', 'q'],
             ['erre', 'r'], ['ere', 'r'], ['r', 'r'], ['ese', 's'], ['s', 's'], ['te', 't'], ['t', 't'],
             ['u', 'u'], ['uve doble', 'w'], ['doble ve', 'w'], ['doble u', 'w'], ['w', 'w'],
-            ['equis', 'x'], ['x', 'x'], ['ye', 'y'], ['i griega', 'y'], ['y', 'y'], ['zeta', 'z'], ['z',
-                'z'],
+            ['equis', 'x'], ['x', 'x'], ['ye', 'y'], ['i griega', 'y'], ['y', 'y'], ['zeta', 'z'], ['z', 'z'],
 
             // Signos
-            ['arroba', '@'], ['punto', '.'], ['guion', '-'], ['guion medio', '-'], ['guion bajo', '_'],
-            ['espacio', ' '],
+            ['arroba', '@'], ['punto', '.'], ['guion', '-'], ['guion medio', '-'], ['guion bajo', '_'], ['espacio', ' '],
 
             // Números
             ['cero', '0'], ['uno', '1'], ['dos', '2'], ['tres', '3'], ['cuatro', '4'],
@@ -1738,7 +1675,7 @@
 
         function hardcoreSplit(raw) {
             return String(raw || '')
-                .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // sin tildes
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // sin tildes
                 .toLowerCase()
                 // Inserta espacios entre cada carácter (letras y dígitos), preserva @ . _ -
                 .replace(/([a-z0-9])(?![@._-])/g, '$1 ')
@@ -1929,7 +1866,7 @@
                 mirror.style.position = 'absolute';
                 mirror.style.visibility = 'hidden';
                 mirror.style.pointerEvents = 'none';
-                mirror.style.whiteSpace = 'pre'; // importante: respeta espacios
+                mirror.style.whiteSpace = 'pre';    // importante: respeta espacios
                 mirror.style.top = '-9999px';
                 mirror.style.left = '-9999px';
 
@@ -2024,11 +1961,12 @@
             for (let i = 0; i < event.results.length; i++) {
                 for (let j = 0; j < event.results[i].length; j++) {
                     alts.push({
-                        text: event.results[i][j].transcript.trim(), confidence: event.results[i][j].confidence ?? 0
+                        text: event.results[i][j].transcript.trim(),
+                        confidence: event.results[i][j].confidence ?? 0
                     });
                 }
-            } alts.sort((a, b) => b.confidence -
-                a.confidence);
+            }
+            alts.sort((a, b) => b.confidence - a.confidence);
             return alts; // [{text, confidence}, ...]
         }
 
@@ -2112,19 +2050,17 @@
             const t = stripTags(relevantTextOrHtml || '').toLowerCase();
 
             // Patrones típicos (ES/EN)
-            const asksEmail =
-                /\b(correo|correo\s+electr[oó]nico(?:\s+corporativo)?|email|e-mail|mail)\b/.test(t);
+            const asksEmail = /\b(correo|correo\s+electr[oó]nico(?:\s+corporativo)?|email|e-mail|mail)\b/.test(t);
             const asksEmployee = /\b(n[uú]mero\s+de\s+empleado|employee\s+number)\b/.test(t);
             const asksRFC = /\brfc\b/.test(t);
-            const asksUser =
-                /\b(usuario\s+de\s+login|username|login\s+user|tu\s+usuario)\b/.test(t);
+            const asksUser = /\b(usuario\s+de\s+login|username|login\s+user|tu\s+usuario)\b/.test(t);
             const asksPlaceOfBirth = /\b(lugar\s+de\s+nacimiento|place\s+of\s+birth)\b/.test(t);
 
             //  PRIORIDAD dentro de la línea relevante:
             // Si pide lugar de nacimiento → limpiar modo (no se requiere tarjeta)
             if (asksPlaceOfBirth) { setFieldMode(null, false); return; }
 
-            if (asksEmail) { setFieldMode('email', true); return; } // spelling ON
+            if (asksEmail) { setFieldMode('email', true); return; }        // spelling ON
             if (asksEmployee) { setFieldMode('employnumber', false); return; }
             if (asksRFC) { setFieldMode('rfc', true); return; }
             if (asksUser) { setFieldMode('usuario', true); return; }
@@ -2136,8 +2072,7 @@
 
         // --- 4. RECONOCIMIENTO DE VOZ: configuración y eventos (AUTO-ES/EN) ---
         try {
-            const SpeechRecognition = window.SpeechRecognition ||
-                window.webkitSpeechRecognition;
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (SpeechRecognition) {
                 recognition = new SpeechRecognition();
                 recognition.continuous = false;
@@ -2145,9 +2080,8 @@
                 recognition.maxAlternatives = 5;
 
                 recognition.onstart = () => {
-                    // Fija idioma de arranque del dictado con base en lo último que escribió o habló el
-                    usuario
-                    recognition.lang = CURRENT_ASR_LANG; // 'es-MX' o 'en-US'
+                    // Fija idioma de arranque del dictado con base en lo último que escribió o habló el usuario
+                    recognition.lang = CURRENT_ASR_LANG;   // 'es-MX' o 'en-US'
                     isListening = true;
                     const mic = document.getElementById('micBtn');
                     mic.classList.add('listening');
@@ -2163,8 +2097,7 @@
 
 
                     const input = document.getElementById('userInput');
-                    const needsConfirm = ['email', 'rfc', 'usuario',
-                        'employnumber'].includes(currentFieldMode);
+                    const needsConfirm = ['email', 'rfc', 'usuario', 'employnumber'].includes(currentFieldMode);
 
                     if (!needsConfirm && !isConfirmCardOpen) {
                         const text = (input.value || '').trim();
@@ -2181,12 +2114,12 @@
                     for (let i = 0; i < event.results.length; i++) {
                         for (let j = 0; j < event.results[i].length; j++) {
                             alts.push({
-                                text: event.results[i][j].transcript.trim(), confidence:
-                                    event.results[i][j].confidence ?? 0
+                                text: event.results[i][j].transcript.trim(),
+                                confidence: event.results[i][j].confidence ?? 0
                             });
                         }
-                    } alts.sort((a, b) => b.confidence -
-                        a.confidence);
+                    }
+                    alts.sort((a, b) => b.confidence - a.confidence);
 
                     // Texto "mejor" del dictado
                     const bestRaw = removeTrailingPunctuation(alts[0]?.text || '');
@@ -2202,12 +2135,11 @@
                     document.getElementById('userInput').value = bestText;
 
                     //  Aprende idioma para el siguiente dictado
-                    const iso = detectLanguageFast(bestText); // 'en'|'es'
-                    CURRENT_ASR_LANG = toBCP47(iso); // 'en-US'|'es-MX'
+                    const iso = detectLanguageFast(bestText);     // 'en'|'es'
+                    CURRENT_ASR_LANG = toBCP47(iso);              // 'en-US'|'es-MX'
 
-                        // Resto de tu lógica de tarjetas (email/RFC/usuario/empleado) permanece igual:
-                        // (si usas tarjetas al dictar, se dispara dentro de tu onresult original en
-                        ramas específicas)
+                    // Resto de tu lógica de tarjetas (email/RFC/usuario/empleado) permanece igual:
+                    // (si usas tarjetas al dictar, se dispara dentro de tu onresult original en ramas específicas)
                 };
 
             } else {
@@ -2292,8 +2224,7 @@
         window.addEventListener('DOMContentLoaded', initTTSToggle);
 
         async function speak(text, options = {}) {
-            const onStart = (typeof options === 'function') ? options : (options.onStart ||
-                (() => { }));
+            const onStart = (typeof options === 'function') ? options : (options.onStart || (() => { }));
             const onChunk = options.onChunk || null;
             const onEnd = options.onEnd || (() => { });
 
@@ -2306,8 +2237,7 @@
                 .replace(/\*\*/g, '')
                 .replace(/[#*_]/g, '')
                 .replace(/INC0/gi, 'Ticket INC cero ')
-                .replace(/[\u2700-\u27BF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDD00-\uDDFF]/g,
-                    '');
+                .replace(/[\u2700-\u27BF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDD00-\uDDFF]/g, '');
 
             // 3) Detener audio previo
             isSpeaking = false;
@@ -2332,8 +2262,7 @@
                 for (let sentence of sentences) {
                     if (myId !== currentUtteranceId) break;
                     if (onChunk) {
-                        // Simular duración (aprox 120ms por carácter, máx 8 segundos por párrafo para
-                        no colgar)
+                        // Simular duración (aprox 120ms por carácter, máx 8 segundos por párrafo para no colgar)
                         const simulatedDuration = Math.min(8000, sentence.length * 120);
                         await onChunk(sentence, simulatedDuration);
                     }
@@ -2352,8 +2281,7 @@
             const ttsLang = (langIso === 'en') ? 'en-US' : 'es-MX';
 
             const sentences = prepared.split(/\n+/).filter(s => s.trim().length > 0);
-            if (sentences.length === 0 && prepared.trim().length > 0)
-                sentences.push(prepared);
+            if (sentences.length === 0 && prepared.trim().length > 0) sentences.push(prepared);
 
             isSpeaking = true;
 
@@ -2361,10 +2289,7 @@
                 return new Promise((resolve) => {
                     if (myId !== currentUtteranceId) return resolve(null);
                     callServer('synthesizeSpeech', sentence, ttsLang).then(response => {
-                        if (typeof response === 'string') resolve({
-                            audio: response, type: 'audio/wav',
-                            text: sentence
-                        });
+                        if (typeof response === 'string') resolve({ audio: response, type: 'audio/wav', text: sentence });
                         else resolve({ ...(response || {}), text: sentence });
                     }).catch(err => {
                         console.warn("TTS error chunk " + index, err);
@@ -2374,22 +2299,24 @@
             });
 
             let started = false;
-                for (let i = 0; i < audioPromises.length; i++) {
-                    if (myId !== currentUtteranceId) break;
-                    const chunkData = await audioPromises[i];
-                    if (!started) { onStart(); started = true; }
-                    if (myId !== currentUtteranceId) break;
-                    if (chunkData && chunkData.audio) {
-                        await playAudioChunk(chunkData, myId, (duration) => {
-                            if (onChunk) onChunk(chunkData.text, duration);
-                        });
-                    } else if (onChunk && chunkData && chunkData.text) {
-                        onChunk(chunkData.text, chunkData.text.length * 75);
-                    }
-                }
+            for (let i = 0; i < audioPromises.length; i++) {
+                if (myId !== currentUtteranceId) break;
 
-                if (!started) onStart();
-                if (myId === currentUtteranceId) {
+                const chunkData = await audioPromises[i];
+                if (!started) { onStart(); started = true; }
+                if (myId !== currentUtteranceId) break;
+
+                if (chunkData && chunkData.audio) {
+                    await playAudioChunk(chunkData, myId, (duration) => {
+                        if (onChunk) onChunk(chunkData.text, duration);
+                    });
+                } else if (onChunk && chunkData && chunkData.text) {
+                    onChunk(chunkData.text, chunkData.text.length * 75);
+                }
+            }
+
+            if (!started) onStart();
+            if (myId === currentUtteranceId) {
                 isSpeaking = false;
                 onEnd();
             }
@@ -2435,12 +2362,8 @@
 
         function detectLanguageFast(text) {
             const t = String(text || '').toLowerCase();
-            const enHits =
-                (t.match(/\b(the|is|are|you|please|help|need|password|status|ticket)\b/g) ||
-                    []).length;
-            const esHits =
-                (t.match(/\b(el|la|los|para|necesito|contraseña|estatus|ticket|ayuda)\b/g)
-                    || []).length;
+            const enHits = (t.match(/\b(the|is|are|you|please|help|need|password|status|ticket)\b/g) || []).length;
+            const esHits = (t.match(/\b(el|la|los|para|necesito|contraseña|estatus|ticket|ayuda)\b/g) || []).length;
             if (enHits > esHits) return 'en';
             if (esHits > enHits) return 'es';
             if (/[a-z]/.test(t) && /\b(the|is|are)\b/.test(t)) return 'en';
@@ -2500,8 +2423,7 @@
         }
 
         function transformLinkLikeSegmentsForSpeech(input) {
-            const tokenRx =
-                /((?:https?:\/\/[^\s]+)|(?:[^\s@]+@[^\s@]+\.[^\s@]{2,})|(?:[a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s]*)?))/ig;
+            const tokenRx = /((?:https?:\/\/[^\s]+)|(?:[^\s@]+@[^\s@]+\.[^\s@]{2,})|(?:[a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s]*)?))/ig;
             return String(input).replace(tokenRx, (m) => {
                 const raw = m.trim();
                 if (isLikelyEmail(raw)) return verbalizeEmail(raw);
@@ -2539,11 +2461,8 @@
             // Reglas exclusivas para ESPAÑOL
             if (lang === 'es') {
                 t = t.replace(/liverpool/gi, 'liverpúl');
-                t =
-                    t.replace(/\b(N[º°o]\.?|No\.?|N°|Nº)(\s+|\.)(de\s+|del\s+)?empleado\b/gi,
-                        'Número de empleado');
-                t = t.replace(/\b(N[º°o]\.?|No\.?|N°|Nº)(\s+|\.)(de\s+|del\s+)?tienda\b/gi,
-                    'Número de tienda');
+                t = t.replace(/\b(N[º°o]\.?|No\.?|N°|Nº)(\s+|\.)(de\s+|del\s+)?empleado\b/gi, 'Número de empleado');
+                t = t.replace(/\b(N[º°o]\.?|No\.?|N°|Nº)(\s+|\.)(de\s+|del\s+)?tienda\b/gi, 'Número de tienda');
                 t = t.replace(/\b(N[º°o]\.?|No\.?|N°|Nº)(\s+|\.)(?=\w|\d)/g, 'Número ');
             }
 
@@ -2551,13 +2470,10 @@
             t = t.replace(/[-–—]{2,}/g, ' – ');
             t = t.replace(/\b(\d{5,})\b/g, (m) => m.split('').join(' '));
 
-                            // Ajuste de pronunciación de números en etiquetas (ahora multilenguaje en
-                            concepto)
-            const numLabelPrefix = (lang === 'es') ? 'n[uú]mero\\s+de\\s+empleado' :
-                'employee\\s+number';
+            // Ajuste de pronunciación de números en etiquetas (ahora multilenguaje en concepto)
+            const numLabelPrefix = (lang === 'es') ? 'n[uú]mero\\s+de\\s+empleado' : 'employee\\s+number';
             const numLabelRx = new RegExp(`(${numLabelPrefix}[:\\s]*)(\\d{2,})`, 'gi');
-            t = t.replace(numLabelRx, (_, prefix, num) =>
-                `${prefix}${num.split('').join(' ')}`);
+            t = t.replace(numLabelRx, (_, prefix, num) => `${prefix}${num.split('').join(' ')}`);
 
             t = t.replace(/\b(RFC[:\s]*)([A-Za-zÑ&]{3,4}\d{2,}[A-Za-z0-9]{0,})\b/gi,
                 (m, prefix, r) => {
@@ -2610,8 +2526,7 @@
                 let i = 0;
                 while (i < html.length) {
                     if (html[i] === '<') {
-                        let end = html.indexOf('>',
-                            i);
+                        let end = html.indexOf('>', i);
                         if (end !== -1) {
                             tokens.push({ type: 'tag', content: html.substring(i, end + 1) });
                             i = end + 1;
@@ -2639,45 +2554,45 @@
                             return;
                         }
 
-                                // Estimamos cuántos caracteres de TEXTO (no tags) debemos revelar en
-                                este segmento
-                                // Usamos un contador relativo para no depender del match exacto de
-                                texto fonético vs html
+                        // Estimamos cuántos caracteres de TEXTO (no tags) debemos revelar en este segmento
+                        // Usamos un contador relativo para no depender del match exacto de texto fonético vs html
                         let segmentTokens = [];
                         let charsInSegment = 0;
 
-                                // Consumimos tokens hasta agotar el buffer o encontrar un salto (si el
-                                segmento es corto)
-                    // Para SophIA, los segmentos suelen ser frases completas.
-                    const charDelay = (duration * 1.05) / (segmentClean.length || 1);
+                        // Consumimos tokens hasta agotar el buffer o encontrar un salto (si el segmento es corto)
+                        // Para SophIA, los segmentos suelen ser frases completas.
+                        const charDelay = (duration * 1.05) / (segmentClean.length || 1);
 
-                    function step() {
-                        if (isFinalized) return resolve();
+                        function step() {
+                            if (isFinalized) return resolve();
 
-                        if (tokenIndex < tokens.length) {
-                            let token = tokens[tokenIndex];
-                            if (token.type === 'tag') {
-                                div.innerHTML += token.content;
-                                tokenIndex++;
-                                step(); // Tags instantáneos
-                            } else {
-                                div.innerHTML += token.content;
-                                tokenIndex++;
-                                charsInSegment++;
-                                scrollToBottom();
-                                // Si ya cubrimos la proporción del segmento, resolvemos
-                                if (charsInSegment >= segmentClean.length) {
-                                    resolve();
+                            if (tokenIndex < tokens.length) {
+                                let token = tokens[tokenIndex];
+
+                                if (token.type === 'tag') {
+                                    div.innerHTML += token.content;
+                                    tokenIndex++;
+                                    step(); // Tags instantáneos
                                 } else {
-                                    setTimeout(step, charDelay);
+                                    div.innerHTML += token.content;
+                                    tokenIndex++;
+                                    charsInSegment++;
+                                    scrollToBottom();
+
+                                    // Si ya cubrimos la proporción del segmento, resolvemos
+                                    if (charsInSegment >= segmentClean.length) {
+                                        resolve();
+                                    } else {
+                                        setTimeout(step, charDelay);
+                                    }
                                 }
+                            } else {
+                                resolve();
                             }
-                        } else {
-                            resolve();
                         }
-                    }
-                });
-            },
+                        step();
+                    });
+                },
                 finalize: function () {
                     if (isFinalized) return;
                     isFinalized = true;
@@ -2688,8 +2603,8 @@
                     scrollToBottom();
                     if (callbackWhenDone) callbackWhenDone();
                 }
-        };
-                                    }
+            };
+        }
 
 
         function scrollToBottom() {
@@ -2700,12 +2615,8 @@
 
         // Mensaje de bienvenida (HTML) e inyección con TTS
         function postWelcomeMessage() {
-            const firstName = userFullName.split(' ')[0].charAt(0).toUpperCase()
-                + userFullName.split(' ')[0].slice(1).toLowerCase();
-            const saludoHtml = `¡Hola ${firstName}! soy Sophia, el asistente
-                                    virtual de Soportec. Estoy aquí para agilizar tu día haciendo
-                                    reinicios de contraseñas, desbloqueo de cuentas y consultando el
-                                    estatus de tus tickets en tiempo real. ¿En que puedo ayudarte hoy?`;
+            const firstName = userFullName.split(' ')[0].charAt(0).toUpperCase() + userFullName.split(' ')[0].slice(1).toLowerCase();
+            const saludoHtml = `¡Hola ${firstName}! soy Sophia, el asistente virtual de Soportec. Estoy aquí para agilizar tu día haciendo reinicios de contraseñas, desbloqueo de cuentas y consultando el estatus de tus tickets en tiempo real. ¿En que puedo ayudarte hoy?`;
 
             lockUI({ hideQuickActions: true });
             const loader = document.getElementById('loading');
@@ -2729,6 +2640,9 @@
             scrollToBottom();
         }
 
+    </script>
+
+    <script>
         // --- CHAT ID Y ENVÍO ---
         function getChatId() {
             let id = sessionStorage.getItem('sophia_chat_id');
@@ -3098,76 +3012,6 @@
 
             return await resp.json();
         }
-
-        // --- GOOGLE PROFILE & POPOVER ---
-        let userFullName = "Usuario";
-
-        async function fetchGoogleProfile() {
-            try {
-                const res = await fetch('/api/user-profile');
-                const data = await res.json();
-                if (data.displayName) {
-                    userFullName = data.displayName;
-                    const nameElem = document.getElementById('user-display-name');
-                    if (nameElem) nameElem.innerText = userFullName;
-
-                    const popNameElem = document.getElementById('popover-name');
-                    if (popNameElem) popNameElem.innerText = userFullName;
-
-                    const popEmailElem = document.getElementById('popover-email');
-                    if (popEmailElem) popEmailElem.innerText = data.email || "";
-
-                    const photoElem = document.getElementById('user-photo');
-                    const initialsElem = document.getElementById('user-initials');
-                    const popPhotoElem = document.getElementById('popover-photo');
-                    const popInitialsElem = document.getElementById('popover-initials');
-
-                    if (data.photo && data.photo.trim() !== "") {
-                        if (photoElem) { photoElem.src = data.photo; photoElem.style.display = 'block'; }
-                        if (popPhotoElem) { popPhotoElem.src = data.photo; popPhotoElem.style.display = 'block'; }
-                        if (initialsElem) initialsElem.style.display = 'none';
-                        if (popInitialsElem) popInitialsElem.style.display = 'none';
-                    } else {
-                        if (photoElem) photoElem.style.display = 'none';
-                        if (popPhotoElem) popPhotoElem.style.display = 'none';
-
-                        const parts = userFullName.split(' ').filter(p => p.length > 0);
-                        let initials = "U";
-                        if (parts.length >= 2) initials = (parts[0][0] + parts[1][0]).toUpperCase();
-                        else if (parts.length === 1) initials = parts[0][0].toUpperCase();
-
-                        if (initialsElem) { initialsElem.innerText = initials; initialsElem.style.display = 'flex'; }
-                        if (popInitialsElem) { popInitialsElem.innerText = initials; popInitialsElem.style.display = 'flex'; }
-                    }
-                }
-            } catch (e) {
-                console.error("Error perfil:", e);
-            }
-        }
-
-        function togglePopover(event) {
-            if (event) event.stopPropagation();
-            const popover = document.getElementById('user-popover');
-            if (popover) {
-                popover.classList.toggle('active');
-            }
-        }
-
-        function logout() {
-            window.location.href = '/api/logout';
-        }
-
-        document.addEventListener('click', (event) => {
-            const popover = document.getElementById('user-popover');
-            const chip = document.getElementById('user-email');
-            if (popover && popover.classList.contains('active')) {
-                if (!popover.contains(event.target) && !chip.contains(event.target)) {
-                    popover.classList.remove('active');
-                }
-            }
-        });
-
-        fetchGoogleProfile();
     </script>
 </body>
 
