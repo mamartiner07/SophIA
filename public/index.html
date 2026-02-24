@@ -208,12 +208,60 @@
             font-weight: 600;
             opacity: 0.95;
             padding: 4px 10px;
-            border-radius: 6px;
+            border-radius: 20px;
+            /* Redondeado tipo píldora */
             background: rgba(255, 255, 255, 0.15);
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 10px;
             white-space: nowrap;
+            transition: background 0.2s;
+        }
+
+        .user-email-panel:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .user-avatar-container {
+            position: relative;
+            width: 28px;
+            height: 28px;
+            flex-shrink: 0;
+        }
+
+        .user-avatar {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1.5px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .user-initials {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: var(--accent);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            border: 1.5px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .user-email-panel .status-dot {
+            position: absolute;
+            bottom: -1px;
+            right: -1px;
+            width: 10px;
+            height: 10px;
+            border: 2px solid #a14681;
+            /* Color del header para mimetizarse */
+            background-color: #00e676;
+            z-index: 2;
         }
 
         @media (max-width: 480px) {
@@ -1136,6 +1184,31 @@
                     userFullName = data.displayName;
                     const nameElem = document.getElementById('user-display-name');
                     if (nameElem) nameElem.innerText = userFullName;
+
+                    // Gestionar Foto / Iniciales
+                    const photoElem = document.getElementById('user-photo');
+                    const initialsElem = document.getElementById('user-initials');
+
+                    if (data.photo && data.photo.trim() !== "") {
+                        if (photoElem) {
+                            photoElem.src = data.photo;
+                            photoElem.style.display = 'block';
+                        }
+                        if (initialsElem) initialsElem.style.display = 'none';
+                    } else {
+                        if (photoElem) photoElem.style.display = 'none';
+                        if (initialsElem) {
+                            // Generar iniciales del nombre
+                            const parts = userFullName.split(' ').filter(p => p.length > 0);
+                            let initials = "U";
+                            if (parts.length >= 2) initials = (parts[0][0] + parts[1][0]).toUpperCase();
+                            else if (parts.length === 1) initials = parts[0][0].toUpperCase();
+
+                            initialsElem.innerText = initials;
+                            initialsElem.style.display = 'flex';
+                        }
+                    }
+
                     console.log("Autenticado como:", userFullName);
                 }
             } catch (e) {
@@ -1193,9 +1266,13 @@
                         </label>
                     </div>
                     <div id="user-email" class="user-email-panel">
-                        <span class="status-dot"></span>
+                        <div class="user-avatar-container">
+                            <img id="user-photo" src="" alt="" class="user-avatar" style="display:none;">
+                            <div id="user-initials" class="user-initials" style="display:none;">U</div>
+                            <span class="status-dot"></span>
+                        </div>
                         <span id="user-display-name">
-                            Usuario Demo
+                            Usuario
                         </span>
                     </div>
                 </div>
