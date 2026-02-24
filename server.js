@@ -61,7 +61,7 @@ app.get('/api/user-profile', isAuth, (req, res) => {
         console.log(`[Profile] Entregando datos de Google para: ${email}`);
 
         res.json({
-            displayName: firstName,
+            displayName: req.user.displayName || firstName,
             email: email,
             photo: photo
         });
