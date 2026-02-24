@@ -301,8 +301,7 @@ SophIA/
 ├── server.js              ← Orquestador backend
 └── public/
     ├── index.html          ← Frontend SPA
-    ├── logos.js             ← Assets de logos (Base64)
-    └── logos.html           ← (Legacy)
+    └──logos.js             ← Assets de logos
 ```
 
 ---
