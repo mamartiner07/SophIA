@@ -216,6 +216,8 @@
             gap: 10px;
             white-space: nowrap;
             transition: background 0.2s;
+            position: relative;
+            /* Agregado para posicionar el popover */
         }
 
         .user-email-panel:hover {
@@ -1164,6 +1166,105 @@
             opacity: 0.55;
             pointer-events: none;
         }
+
+        .user-popover {
+            position: absolute;
+            top: calc(100% + 10px);
+            right: 0;
+            width: 260px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1.5px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+            z-index: 10000 !important;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            animation: popoverFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            transform-origin: top right;
+        }
+
+        .user-popover.active {
+            display: flex;
+        }
+
+        @keyframes popoverFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px) scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .popover-avatar-container {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            overflow: hidden;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .popover-avatar {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .popover-initials {
+            font-size: 24px;
+            font-weight: 700;
+            color: white;
+        }
+
+        .popover-info {
+            text-align: center;
+            color: white;
+            margin-bottom: 5px;
+        }
+
+        .popover-name {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .popover-email {
+            font-size: 13px;
+            opacity: 0.7;
+        }
+
+        .btn-logout {
+            width: 100%;
+            padding: 10px;
+            border-radius: 12px;
+            border: none;
+            background: rgba(255, 59, 48, 0.2);
+            color: #ff453a;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-logout:hover {
+            background: rgba(255, 59, 48, 0.3);
+            transform: translateY(-1px);
+        }
     </style>
 
     <!-- Incluye tus logos (define window.LOGOS.SOPORTEC) -->
@@ -1185,28 +1286,37 @@
                     const nameElem = document.getElementById('user-display-name');
                     if (nameElem) nameElem.innerText = userFullName;
 
-                    // Gestionar Foto / Iniciales
+                    // --- POPULATE POPOVER ---
+                    const popName = document.getElementById('popover-name');
+                    const popEmail = document.getElementById('popover-email');
+                    if (popName) popName.innerText = userFullName;
+                    if (popEmail) popEmail.innerText = data.email || "";
+
+                    // Gestionar Foto / Iniciales (CHIP Y POPOVER)
                     const photoElem = document.getElementById('user-photo');
                     const initialsElem = document.getElementById('user-initials');
+                    const popPhoto = document.getElementById('popover-photo');
+                    const popInitials = document.getElementById('popover-initials');
 
-                    if (data.photo && data.photo.trim() !== "") {
-                        if (photoElem) {
-                            photoElem.src = data.photo;
-                            photoElem.style.display = 'block';
-                        }
+                    const hasPhoto = data.photo && data.photo.trim() !== "";
+
+                    if (hasPhoto) {
+                        if (photoElem) { photoElem.src = data.photo; photoElem.style.display = 'block'; }
                         if (initialsElem) initialsElem.style.display = 'none';
+                        if (popPhoto) { popPhoto.src = data.photo; popPhoto.style.display = 'block'; }
+                        if (popInitials) popInitials.style.display = 'none';
                     } else {
                         if (photoElem) photoElem.style.display = 'none';
-                        if (initialsElem) {
-                            // Generar iniciales del nombre
-                            const parts = userFullName.split(' ').filter(p => p.length > 0);
-                            let initials = "U";
-                            if (parts.length >= 2) initials = (parts[0][0] + parts[1][0]).toUpperCase();
-                            else if (parts.length === 1) initials = parts[0][0].toUpperCase();
+                        if (popPhoto) popPhoto.style.display = 'none';
 
-                            initialsElem.innerText = initials;
-                            initialsElem.style.display = 'flex';
-                        }
+                        // Generar iniciales
+                        const parts = userFullName.split(' ').filter(p => p.length > 0);
+                        let initials = "U";
+                        if (parts.length >= 2) initials = (parts[0][0] + parts[1][0]).toUpperCase();
+                        else if (parts.length === 1) initials = parts[0][0].toUpperCase();
+
+                        if (initialsElem) { initialsElem.innerText = initials; initialsElem.style.display = 'flex'; }
+                        if (popInitials) { popInitials.innerText = initials; popInitials.style.display = 'flex'; }
                     }
 
                     console.log("Autenticado como:", userFullName);
@@ -1215,6 +1325,29 @@
                 console.error("Error al obtener perfil de Google:", e);
             }
         }
+
+        function togglePopover(event) {
+            if (event) event.stopPropagation();
+            const popover = document.getElementById('user-popover');
+            if (popover) {
+                popover.classList.toggle('active');
+            }
+        }
+
+        function logout() {
+            window.location.href = '/logout';
+        }
+
+        // Cierre al hacer clic fuera
+        document.addEventListener('click', (event) => {
+            const popover = document.getElementById('user-popover');
+            const chip = document.getElementById('user-email');
+            if (popover && popover.classList.contains('active')) {
+                if (!popover.contains(event.target) && !chip.contains(event.target)) {
+                    popover.classList.remove('active');
+                }
+            }
+        });
 
         // Ejecutar al cargar la página
         fetchGoogleProfile();
@@ -1265,7 +1398,7 @@
                             <span class="tts-slider"></span>
                         </label>
                     </div>
-                    <div id="user-email" class="user-email-panel">
+                    <div id="user-email" class="user-email-panel" onclick="togglePopover(event)">
                         <div class="user-avatar-container">
                             <img id="user-photo" src="" alt="" class="user-avatar" style="display:none;">
                             <div id="user-initials" class="user-initials" style="display:none;">U</div>
@@ -1274,6 +1407,21 @@
                         <span id="user-display-name">
                             Usuario
                         </span>
+
+                        <!-- Mini Profile Popover -->
+                        <div id="user-popover" class="user-popover">
+                            <div class="popover-avatar-container">
+                                <img id="popover-photo" src="" alt="" class="popover-avatar" style="display:none;">
+                                <div id="popover-initials" class="popover-initials" style="display:none;">U</div>
+                            </div>
+                            <div class="popover-info">
+                                <div id="popover-name" class="popover-name">Cargando...</div>
+                                <div id="popover-email" class="popover-email">...</div>
+                            </div>
+                            <button class="btn-logout" onclick="logout()">
+                                <span>Cerrar Sesión</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
