@@ -209,7 +209,6 @@
             opacity: 0.95;
             padding: 4px 10px;
             border-radius: 20px;
-            /* Redondeado tipo píldora */
             background: rgba(255, 255, 255, 0.15);
             display: flex;
             align-items: center;
@@ -217,11 +216,12 @@
             white-space: nowrap;
             transition: background 0.2s;
             position: relative;
-            /* Agregado para posicionar el popover */
+            cursor: pointer;
+            user-select: none;
         }
 
         .user-email-panel:hover {
-            background: rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.28);
         }
 
         .user-avatar-container {
@@ -1172,19 +1172,17 @@
             top: calc(100% + 10px);
             right: 0;
             width: 260px;
-            background: rgba(30, 20, 40, 0.85);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1.5px solid rgba(255, 255, 255, 0.15);
-            border-radius: 20px;
-            padding: 24px;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+            background: linear-gradient(145deg, #7a3568, #a14681);
+            border: 1.5px solid rgba(255, 255, 255, 0.18);
+            border-radius: 16px;
+            padding: 22px 20px;
+            box-shadow: 0 12px 32px rgba(80, 20, 60, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.08);
             z-index: 10000 !important;
             display: none;
             flex-direction: column;
             align-items: center;
-            gap: 15px;
-            animation: popoverFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            gap: 14px;
+            animation: popoverFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
             transform-origin: top right;
         }
 
@@ -1195,7 +1193,7 @@
         @keyframes popoverFadeIn {
             from {
                 opacity: 0;
-                transform: translateY(-10px) scale(0.95);
+                transform: translateY(-8px) scale(0.96);
             }
 
             to {
@@ -1205,15 +1203,15 @@
         }
 
         .popover-avatar-container {
-            width: 64px;
-            height: 64px;
+            width: 56px;
+            height: 56px;
             border-radius: 50%;
             overflow: hidden;
-            border: 2px solid rgba(255, 255, 255, 0.2);
+            border: 2.5px solid rgba(255, 255, 255, 0.3);
             display: flex;
             align-items: center;
             justify-content: center;
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.12);
         }
 
         .popover-avatar {
@@ -1223,7 +1221,7 @@
         }
 
         .popover-initials {
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 700;
             color: white;
         }
@@ -1231,39 +1229,46 @@
         .popover-info {
             text-align: center;
             color: white;
-            margin-bottom: 5px;
         }
 
         .popover-name {
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 600;
             margin-bottom: 2px;
         }
 
         .popover-email {
-            font-size: 13px;
-            opacity: 0.7;
+            font-size: 12px;
+            opacity: 0.75;
+        }
+
+        .popover-divider {
+            width: 100%;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.15);
+            margin: 2px 0;
         }
 
         .btn-logout {
             width: 100%;
-            padding: 10px;
-            border-radius: 12px;
-            border: none;
-            background: rgba(255, 59, 48, 0.2);
-            color: #ff453a;
+            padding: 9px 0;
+            border-radius: 10px;
+            border: 1.5px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 6px;
         }
 
         .btn-logout:hover {
-            background: rgba(255, 59, 48, 0.3);
-            transform: translateY(-1px);
+            background: rgba(255, 255, 255, 0.22);
+            border-color: rgba(255, 255, 255, 0.35);
         }
     </style>
 
@@ -1418,7 +1423,9 @@
                                 <div id="popover-name" class="popover-name">Cargando...</div>
                                 <div id="popover-email" class="popover-email">...</div>
                             </div>
+                            <div class="popover-divider"></div>
                             <button class="btn-logout" onclick="logout()">
+                                <span>⎋</span>
                                 <span>Cerrar Sesión</span>
                             </button>
                         </div>
