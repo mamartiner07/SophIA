@@ -271,6 +271,15 @@
                 font-size: 11px;
                 padding: 3px 8px;
             }
+
+            .user-email-panel #user-display-name {
+                display: inline-block;
+                max-width: 80px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                vertical-align: middle;
+            }
         }
 
         /* Barra separadora bajo el header (opcional) */
@@ -1157,14 +1166,20 @@
         }
 
         .watermark {
-            position: absolute;
-            bottom: 4px;
-            left: 50%;
-            transform: translateX(-50%);
+            text-align: center;
             font-size: 10px;
             color: rgba(0, 0, 0, 0.35);
             opacity: 0.55;
             pointer-events: none;
+            padding: 4px 0;
+            flex-shrink: 0;
+        }
+
+        @media (max-width: 480px) {
+            .watermark {
+                font-size: 8px;
+                padding: 2px 0;
+            }
         }
 
         .user-popover {
@@ -1269,6 +1284,40 @@
         .btn-logout:hover {
             background: rgba(255, 255, 255, 0.22);
             border-color: rgba(255, 255, 255, 0.35);
+        }
+
+        /* --- POPOVER MOBILE: Centered modal overlay --- */
+        @media (max-width: 480px) {
+            .user-popover {
+                position: fixed;
+                top: auto;
+                bottom: auto;
+                left: 12px;
+                right: 12px;
+                top: 50%;
+                transform: translateY(-50%);
+                width: auto;
+                max-width: 320px;
+                margin: 0 auto;
+                border-radius: 20px;
+                padding: 28px 24px;
+            }
+
+            .user-popover.active {
+                display: flex;
+            }
+
+            @keyframes popoverFadeIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(-50%) scale(0.92);
+                }
+
+                to {
+                    opacity: 1;
+                    transform: translateY(-50%) scale(1);
+                }
+            }
         }
     </style>
 
