@@ -209,17 +209,124 @@
             opacity: 0.95;
             padding: 4px 10px;
             border-radius: 20px;
-            /* Redondeado tipo píldora */
             background: rgba(255, 255, 255, 0.15);
             display: flex;
             align-items: center;
             gap: 10px;
             white-space: nowrap;
-            transition: background 0.2s;
+            transition: all 0.2s;
+            cursor: pointer;
+            position: relative;
+            user-select: none;
         }
 
         .user-email-panel:hover {
             background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-1px);
+        }
+
+        .user-email-panel:active {
+            transform: translateY(0);
+        }
+
+        /* Popover de Perfil */
+        .user-popover {
+            position: absolute;
+            top: calc(100% + 10px);
+            right: 0;
+            width: 240px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1.5px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            animation: fadeInSlide 0.3s ease-out;
+        }
+
+        .user-popover.active {
+            display: flex;
+        }
+
+        @keyframes fadeInSlide {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .popover-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            border: 2px solid var(--accent);
+            object-fit: cover;
+        }
+
+        .popover-initials {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 700;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .popover-info {
+            text-align: center;
+        }
+
+        .popover-name {
+            display: block;
+            font-size: 16px;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 4px;
+        }
+
+        .popover-email {
+            display: block;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+            word-break: break-all;
+        }
+
+        .logout-btn {
+            width: 100%;
+            padding: 10px;
+            border-radius: 10px;
+            border: none;
+            background: rgba(255, 59, 48, 0.2);
+            color: #ff3b30;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 59, 48, 0.3);
+            color: #ff453a;
         }
 
         .user-avatar-container {
@@ -1185,36 +1292,75 @@
                     const nameElem = document.getElementById('user-display-name');
                     if (nameElem) nameElem.innerText = userFullName;
 
+                    const popNameElem = document.getElementById('popover-name');
+                    if (popNameElem) popNameElem.innerText = userFullName;
+
+                    const popEmailElem = document.getElementById('popover-email');
+                    if (popEmailElem) popEmailElem.innerText = data.email || "";
+
                     // Gestionar Foto / Iniciales
                     const photoElem = document.getElementById('user-photo');
                     const initialsElem = document.getElementById('user-initials');
+                    const popPhotoElem = document.getElementById('popover-photo');
+                    const popInitialsElem = document.getElementById('popover-initials');
 
                     if (data.photo && data.photo.trim() !== "") {
                         if (photoElem) {
                             photoElem.src = data.photo;
                             photoElem.style.display = 'block';
                         }
+                        if (popPhotoElem) {
+                            popPhotoElem.src = data.photo;
+                            popPhotoElem.style.display = 'block';
+                        }
                         if (initialsElem) initialsElem.style.display = 'none';
+                        if (popInitialsElem) popInitialsElem.style.display = 'none';
                     } else {
                         if (photoElem) photoElem.style.display = 'none';
-                        if (initialsElem) {
-                            // Generar iniciales del nombre
-                            const parts = userFullName.split(' ').filter(p => p.length > 0);
-                            let initials = "U";
-                            if (parts.length >= 2) initials = (parts[0][0] + parts[1][0]).toUpperCase();
-                            else if (parts.length === 1) initials = parts[0][0].toUpperCase();
+                        if (popPhotoElem) popPhotoElem.style.display = 'none';
 
+                        // Generar iniciales del nombre
+                        const parts = userFullName.split(' ').filter(p => p.length > 0);
+                        let initials = "U";
+                        if (parts.length >= 2) initials = (parts[0][0] + parts[1][0]).toUpperCase();
+                        else if (parts.length === 1) initials = parts[0][0].toUpperCase();
+
+                        if (initialsElem) {
                             initialsElem.innerText = initials;
                             initialsElem.style.display = 'flex';
                         }
+                        if (popInitialsElem) {
+                            popInitialsElem.innerText = initials;
+                            popInitialsElem.style.display = 'flex';
+                        }
                     }
-
                     console.log("Autenticado como:", userFullName);
                 }
             } catch (e) {
                 console.error("Error al obtener perfil de Google:", e);
             }
         }
+
+        function togglePopover(event) {
+            event.stopPropagation();
+            const popover = document.getElementById('user-popover');
+            if (popover) popover.classList.toggle('active');
+        }
+
+        function logout() {
+            window.location.href = '/api/logout';
+        }
+
+        // Cerrar popover al hacer clic fuera
+        document.addEventListener('click', (event) => {
+            const popover = document.getElementById('user-popover');
+            const chip = document.getElementById('user-email');
+            if (popover && popover.classList.contains('active')) {
+                if (!popover.contains(event.target) && !chip.contains(event.target)) {
+                    popover.classList.remove('active');
+                }
+            }
+        });
 
         // Ejecutar al cargar la página
         fetchGoogleProfile();
@@ -1265,7 +1411,7 @@
                             <span class="tts-slider"></span>
                         </label>
                     </div>
-                    <div id="user-email" class="user-email-panel">
+                    <div id="user-email" class="user-email-panel" onclick="togglePopover(event)">
                         <div class="user-avatar-container">
                             <img id="user-photo" src="" alt="" class="user-avatar" style="display:none;">
                             <div id="user-initials" class="user-initials" style="display:none;">U</div>
@@ -1274,6 +1420,25 @@
                         <span id="user-display-name">
                             Usuario
                         </span>
+
+                        <!-- Popover -->
+                        <div id="user-popover" class="user-popover">
+                            <img id="popover-photo" src="" alt="" class="popover-avatar" style="display:none;">
+                            <div id="popover-initials" class="popover-initials" style="display:none;">U</div>
+                            <div class="popover-info">
+                                <span id="popover-name" class="popover-name">Usuario</span>
+                                <span id="popover-email" class="popover-email">correo@liverpool.com.mx</span>
+                            </div>
+                            <button class="logout-btn" onclick="logout()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                    <polyline points="16 17 21 12 16 7"></polyline>
+                                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                                </svg>
+                                Cerrar Sesión
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
