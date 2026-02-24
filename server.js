@@ -142,6 +142,12 @@ function getContextSophia(displayName) {
            PLANTILLA DE RESPUESTA ESPERADA:
            Claro, **${firstName}**, estos son los detalles del ticket solicitado:
 
+           (REGLA DE ÉXITO PARA RESETEO):
+           - Si el estatus es 'success', incluye el ID del incidente exactamente como se recibió del sistema (ej. 12345678), sin prefijos adicionales a menos que ya los traiga el valor original. Recuerda informar que la contraseña fue enviada al buzón institucional.
+
+           (REGLA DE ERROR/FALLO PARA RESETEO):
+           - Si el estatus es 'failed' o hay un error de verificación, DEBES parafrasear (con tus propias palabras, sin que suene robótico) la siguiente idea: "Lo lamento, **${firstName}**, tus datos no pudieron ser verificados correctamente en el sistema para realizar el proceso de forma automática. Por favor, ponte en contacto con el equipo de RH de tu localidad para validar tu información en el sistema. Quedo a tu disposición para cualquier otra solicitud."
+
             **Resumen:**
            [Aquí necesito que hagas un resumen con tus propias palabras de los datos que tengas del ticket]
 
@@ -158,7 +164,7 @@ function getContextSophia(displayName) {
            - Si el usuario solicita reset de contraseña (restablecer / reiniciar), debes pedir educadamente estos datos, uno por uno si faltan.
            - Si el usuario te pide qué datos necesitas, puedes pedir todos en el mismo mensaje; de lo contrario, pídelos uno por uno.
            - Cuando pidas datos al usuario, utiliza SIEMPRE etiquetas en español, naturales y amigables. En caso de que el usuario te hable en inglés, traduce las etiquetas a inglés:
-             • action  → "Reinicio o desbloqueo de cuenta" (Si el usuario indica que es reinicio, reset, cambio de contraseña, el valor que envías a la API será RESETEO; si el usuario dice desbloquear o similares, deberás enviar DESBLOQUEO. Asesora al usuario indicando que si no recuerda su contraseña deberá pedir un reinicio de contraseña, y si la recuerda, deberá pedir un desbloqueo de cuenta. Si el usuario te pide directamente reinicio o un desbloqueo, ya no lo asesores y continúa con el flujo.)
+             • action  → "Reinicio o desbloqueo de cuenta" (SI EL USARIO PIDE REINICIO NO DES ASESORÍA Y VE AL SIGUIENTE PUNTO. SI EL USUARIO PIDE DESBLOQUEO NO DES ASESORIA Y VE AL SIGUIENTE PUNTO) Si el usuario indica que es reinicio, reset, cambio de contraseña, el valor que envías a la API será RESETEO; si el usuario dice desbloquear o similares, deberás enviar DESBLOQUEO. Asesora al usuario indicando que si no recuerda su contraseña deberá pedir un reinicio de contraseña, y si la recuerda, deberá pedir un desbloqueo de cuenta. Si el usuario te pide directamente reinicio o un desbloqueo, ya no lo asesores y continúa con el flujo.)
              • employnumber → "número de empleado"
              • mail → "correo electrónico corporativo" (únicamente acepta correos con dominio @liverpool.com.mx o @suburbia.com.mx. Si el usuario te da un correo con otro dominio, indícale que no es válido y especifícale los formatos aceptados.)
              • curp → "CURP"
@@ -181,7 +187,7 @@ function getContextSophia(displayName) {
            - Cuando cuentes con TODOS los datos, llama a la función de herramienta para procesarlo. No inventes datos.
            - Tras la respuesta de la API, informa:
              • Muestra el **ticket** devuelto (si existe).
-             • Indica explícitamente que **la contraseña fue enviada al buzón proporcionado**. Si el reinicio de contraseña fue para alguna de las aplicaciones de Directorio Activo, indica que puede tardar hasta 30 minutos en replicar.
+             • SI la solicitud fue un reseteo indica explícitamente que **la contraseña fue enviada al buzón proporcionado**. Si el reinicio de contraseña fue para alguna de las aplicaciones de Directorio Activo, indica que puede tardar hasta 30 minutos en replicar.
            - Mantén el tono amable. NO USES EMOJIS.
 
            - Si te preguntan por Soportec, indica que los pueden contactar al teléfono 4425006484 o al WhatsApp 5550988688. Ellos pueden realizar creación de tickets e incidentes, y asesoría en TI. Si te piden algo fuera de tu alcance, canalízalo con ellos. Si piden levantar un requerimiento, envíalos a: https://epl-dwp.onbmc.com/
@@ -321,16 +327,25 @@ async function ejecutarResetUM(payloadObj) {
 
 function extraerTicketUM(obj) {
     if (!obj || typeof obj !== 'object') return null;
+    // Prioridad a campos conocidos
     const keys = ['ticket', 'folio', 'incident', 'id'];
     for (const k of keys) if (obj[k]) return String(obj[k]);
+
+    // Si no hay campo directo, buscar en el string completo
     const str = JSON.stringify(obj);
-    const m = str.match(/INC\d+/i) || str.match(/\b\d{6,}\b/);
+    const m = str.match(/INC\d+/i) || str.match(/\d{6,}/); // Buscamos INC o al menos 6 dígitos
     return m ? m[0] : null;
 }
 
 app.post('/api/tts', isAuth, async (req, res) => {
     try {
-        const { text, lang } = req.body;
+        let { text, lang } = req.body;
+
+        // Optimización fonética: Evitar que deletree CURP
+        if (text) {
+            text = text.replace(/CURP/g, 'curp');
+        }
+
         const url = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${CFG.GCLOUD_TTS_API_KEY}`;
 
         // Mapeo de voces personalizadas solicitadas por el usuario
@@ -447,13 +462,17 @@ app.post('/api/chat', isAuth, async (req, res) => {
             } else if (name === "reset_contrasena_um") {
                 const umResp = await ejecutarResetUM(args);
                 if (umResp.Error) {
-                    resultData = { Error: "No se pudo completar el reseteo. " + (umResp.Detalle || "Contacte a Soportec.") };
+                    resultData = {
+                        Status: "failed",
+                        Error: umResp.Error,
+                        Detalle: umResp.Detalle || "No se pudieron verificar los datos."
+                    };
                 } else {
                     const ticket = umResp.incident || extraerTicketUM(umResp);
                     resultData = {
-                        Status: umResp.status === "success" ? "Éxito" : "Fallido",
+                        Status: umResp.status, // "success" o "failed"
                         Ticket: ticket || "Generado",
-                        Mensaje: umResp.detail || "Proceso finalizado correctamente."
+                        Mensaje: umResp.detail || "Proceso finalizado."
                     };
                 }
             }
