@@ -1326,7 +1326,7 @@
             }
         }
 
-        function togglePopover(event) {
+        function toggleProfilePopover(event) {
             if (event) event.stopPropagation();
             const popover = document.getElementById('user-popover');
             if (popover) {
@@ -1398,7 +1398,7 @@
                             <span class="tts-slider"></span>
                         </label>
                     </div>
-                    <div id="user-email" class="user-email-panel" onclick="togglePopover(event)">
+                    <div id="user-email" class="user-email-panel" onclick="toggleProfilePopover(event)">
                         <div class="user-avatar-container">
                             <img id="user-photo" src="" alt="" class="user-avatar" style="display:none;">
                             <div id="user-initials" class="user-initials" style="display:none;">U</div>
