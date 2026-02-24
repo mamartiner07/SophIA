@@ -332,9 +332,26 @@ app.post('/api/tts', isAuth, async (req, res) => {
     try {
         const { text, lang } = req.body;
         const url = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${CFG.GCLOUD_TTS_API_KEY}`;
+
+        // Mapeo de voces personalizadas solicitadas por el usuario
+        let voiceName = "";
+        let langCode = lang || 'es-MX';
+
+        if (langCode.startsWith('en')) {
+            langCode = 'en-US';
+            voiceName = 'en-US-Wavenet-F';
+        } else if (langCode.startsWith('es')) {
+            langCode = 'es-US';
+            voiceName = 'es-US-Wavenet-A';
+        }
+
         const payload = {
             input: { text },
-            voice: { languageCode: lang || 'es-MX', ssmlGender: 'FEMALE' },
+            voice: {
+                languageCode: langCode,
+                name: voiceName,
+                ssmlGender: 'FEMALE'
+            },
             audioConfig: { audioEncoding: 'MP3' }
         };
         const resp = await axios.post(url, payload);
