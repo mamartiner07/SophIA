@@ -242,7 +242,7 @@ async function generarResumenFinal(mensajeOriginal, datosJson, displayName) {
     };
 
     try {
-        const resp = await axios.post(url, payload);
+        const resp = await axios.post(url, payload, { timeout: 30000 });
         const candidates = resp.data.candidates;
         if (!candidates || candidates.length === 0) return "No pude generar el resumen por filtros de seguridad.";
         return candidates[0].content.parts[0].text;
@@ -298,7 +298,7 @@ async function ejecutarResetUM(payloadObj) {
         }
 
         let attempts = 0;
-        const maxAttempts = 20; // Reducido a 5 min (20 * 15s) por timeout de Cloud Run
+        const maxAttempts = 15; // Reducido para evitar el timeout de Cloud Run (aprox 4 min)
         const pollInterval = 15000;
 
         while (attempts < maxAttempts) {
@@ -431,7 +431,7 @@ app.post('/api/chat', isAuth, async (req, res) => {
         const contents = history.concat([{ role: "user", parts: [{ text: message }] }]);
 
         const payload = {
-            systemInstruction: getContextSophia(displayName || "Usuario"),
+            system_instruction: getContextSophia(displayName || "Usuario"),
             contents,
             tools,
             safetySettings: [
@@ -442,7 +442,7 @@ app.post('/api/chat', isAuth, async (req, res) => {
             ]
         };
 
-        const geminiResp = await axios.post(url, payload);
+        const geminiResp = await axios.post(url, payload, { timeout: 45000 });
         const candidates = geminiResp.data.candidates;
         if (!candidates || candidates.length === 0 || !candidates[0].content) {
             const reason = candidates?.[0]?.finishReason || "UNKNOWN";
@@ -479,7 +479,7 @@ app.post('/api/chat', isAuth, async (req, res) => {
 
             // Segunda llamada para resumir el resultado de la función
             const secondPayload = {
-                systemInstruction: getContextSophia(displayName || "Usuario"),
+                system_instruction: getContextSophia(displayName || "Usuario"),
                 contents: contents.concat([
                     { role: "model", parts: [part] },
                     {
@@ -494,7 +494,7 @@ app.post('/api/chat', isAuth, async (req, res) => {
                 ])
             };
 
-            const secondResp = await axios.post(url, secondPayload);
+            const secondResp = await axios.post(url, secondPayload, { timeout: 30000 });
             const secondCandidates = secondResp.data.candidates;
             if (!secondCandidates || secondCandidates.length === 0 || !secondCandidates[0].content) {
                 return res.json({ tipo: "texto", respuesta: "Lo siento, la respuesta final fue bloqueada por filtros de seguridad. El proceso se realizó correctamente pero no puedo describirlo." });
@@ -518,11 +518,16 @@ app.post('/api/chat', isAuth, async (req, res) => {
 
     } catch (e) {
         console.error("Error en Chat:", e.response?.data || e.message);
+
+        let message = "Ocurrió un error interno al procesar tu solicitud.";
+        if (e.code === 'ECONNABORTED') message = "La IA está demorando demasiado en responder, por favor intenta de nuevo.";
+        if (e.response?.status === 429) message = "Estamos recibiendo muchas solicitudes, por favor espera un momento e intenta de nuevo.";
+        if (e.response?.status === 400) message = "Hubo un problema con la consulta a la IA (400), por favor intenta con otras palabras.";
+
         res.status(500).json({
             tipo: "error",
-            respuesta: "Ocurrió un error interno al procesar tu solicitud.",
-            message: e.message,
-            detail: e.response?.data?.error?.message || "No hay más detalles"
+            respuesta: message,
+            detail: e.response?.data?.error?.message || e.message
         });
     }
 });
