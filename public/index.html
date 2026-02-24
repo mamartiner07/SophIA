@@ -269,16 +269,13 @@
         @media (max-width: 480px) {
             .user-email-panel {
                 font-size: 11px;
-                padding: 3px 8px;
+                padding: 3px;
+                border-radius: 50%;
+                gap: 0;
             }
 
             .user-email-panel #user-display-name {
-                display: inline-block;
-                max-width: 80px;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-                vertical-align: middle;
+                display: none;
             }
         }
 
@@ -1286,21 +1283,20 @@
             border-color: rgba(255, 255, 255, 0.35);
         }
 
-        /* --- POPOVER MOBILE: Centered modal overlay --- */
+        /* --- POPOVER MOBILE: Anchored below header --- */
         @media (max-width: 480px) {
             .user-popover {
                 position: fixed;
-                top: auto;
-                bottom: auto;
+                top: 65px;
                 left: 12px;
                 right: 12px;
-                top: 50%;
-                transform: translateY(-50%);
+                bottom: auto;
+                transform: none;
                 width: auto;
-                max-width: 320px;
-                margin: 0 auto;
-                border-radius: 20px;
-                padding: 28px 24px;
+                max-width: none;
+                margin: 0;
+                border-radius: 16px;
+                padding: 24px 20px;
             }
 
             .user-popover.active {
@@ -1310,12 +1306,12 @@
             @keyframes popoverFadeIn {
                 from {
                     opacity: 0;
-                    transform: translateY(-50%) scale(0.92);
+                    transform: translateY(-12px);
                 }
 
                 to {
                     opacity: 1;
-                    transform: translateY(-50%) scale(1);
+                    transform: translateY(0);
                 }
             }
         }
