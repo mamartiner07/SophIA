@@ -14,6 +14,8 @@ Estos permisos permiten construir, subir y desplegar el código en el proyecto.
 | **Logs Viewer** | `roles/logging.viewer` | Cloud Logging | Permite ver los logs de error y la telemetría para depuración y reportes. |
 | **Secret Manager Admin (Opcional)** | `roles/secretmanager.admin` | Secret Manager | Permite crear y gestionar las API Keys (Gemini, BMC) de forma segura. |
 | **Cloud Build Builder (Opcional)** | `roles/cloudbuild.builds.builder` | Cloud Build | Requerido en algunos entornos para que la cuenta pueda ejecutar compilaciones. |
+| **API Keys Admin (Opcional)** | `roles/apikeys.admin` | APIs & Services | Permite crear y restringir las llaves de API necesarias para Gemini. |
+| **OAuth Config Editor (Opcional)** | `roles/oauthconfig.editor` | APIs & Services | **Crucial:** Permite configurar la pantalla de consentimiento y crear los Client IDs para el login corporativo. |
 
 ---
 
@@ -23,6 +25,7 @@ Estos permisos los debe tener la **Service Account** asignada al servicio de Clo
 | Rol | ID Técnico | Se usa en | Justificación |
 | :--- | :--- | :--- | :--- |
 | **Logs Writer** | `roles/logging.logWriter` | Cloud Logging | Permite que SophIA escriba la telemetría y logs estructurados de uso. |
+| **Artifact Registry Reader** | `roles/artifactregistry.reader` | Artifact Registry | Permite que Cloud Run descargue la imagen del contenedor para ejecutarla. |
 | **Secret Manager Accessor** | `roles/secretmanager.secretAccessor` | Secret Manager | Permite leer API Keys (Gemini, BMC) de forma segura si se guardan ahí. |
 | **Speech User** | `roles/speech.client` | Text-to-Speech | Permite que el backend haga llamadas a la API de voz de Google. |
 
@@ -34,6 +37,7 @@ Estos permisos los debe tener la **Service Account** asignada al servicio de Clo
 - Cloud Text-to-Speech API
 - Artifact Registry API
 - Cloud Build API
+- Service Usage API (Necesaria para que el proyecto gestione sus propias cuotas y APIs)
 
 ---
 
@@ -53,3 +57,14 @@ Depende de los permisos que te den:
 
 ## 5. Resumen para el Administrador
 Si quieres simplificar la solicitud, puedes pedir el rol de **EDITOR** (`roles/editor`) sobre el proyecto. Esto te permitirá crear la Service Account, activar las APIs y gestionar todo sin depender de soporte técnico para cada pequeño cambio.
+---
+
+## 6. Nota sobre Sesiones en Producción (Alta Disponibilidad)
+Actualmente, SophIA guarda las sesiones de usuario en la memoria del servidor (`express-session` con memoria RAM). Si en el futuro escalas a **múltiples instancias** de Cloud Run para manejar más usuarios, las sesiones se perderán entre una llamada y otra.
+
+**Para producción robusta (Opcional):**
+1.  Activar la API de **Memorystore for Redis**.
+2.  Asignar el rol `roles/redis.editor` a tu usuario.
+3.  Configurar un Serverless VPC Connector.
+
+*Por ahora, con una sola instancia, esto no es necesario.*
