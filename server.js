@@ -508,13 +508,14 @@ app.post('/api/chat', isAuth, async (req, res) => {
                     properties: {
                         action: { type: "STRING", enum: ["RESETEO", "DESBLOQUEO"], description: "RESETEO (si no recuerda clave) o DESBLOQUEO (si la sabe pero está bloqueado)." },
                         curp: { type: "STRING", description: "CURP del usuario (Obligatorio)." },
+                        mail: { type: "STRING", description: "Correo electrónico corporativo del usuario (Obligatorio)." },
                         employnumber: { type: "STRING", description: "Número de empleado del usuario." },
                         rfc: { type: "STRING", description: "RFC con homoclave." },
                         sysapp: { type: "STRING", description: "Nombre de la aplicación (ej. SAP EWM, Directorio Activo, VPN)." },
                         user: { type: "STRING", description: "ID de usuario de acceso/login." },
                         confirmado: { type: "BOOLEAN", description: "Debe ser TRUE solo si el usuario ya validó y confirmó los datos resumidos." }
                     },
-                    required: ["action", "curp", "employnumber", "rfc", "sysapp", "user", "confirmado"]
+                    required: ["action", "curp", "mail", "employnumber", "rfc", "sysapp", "user", "confirmado"]
                 }
             }
         ]
