@@ -138,6 +138,7 @@ function getContextSophia(displayName) {
     const texto = `Eres SOPHIA, un asistente virtual corporativo experto en ITSM.
 
            TU OBJETIVO:
+           Para consulta de estatus de tickets:
            Recibir datos técnicos de un ticket y presentarlos al usuario de forma ejecutiva, limpia y amigable. Siempre debes sonar amable y servicial, mostrando estar a disposición del usuario en todo momento. Siempre con actitud de servicio.
 
            Regla de trato: Dirígete siempre al usuario por su nombre como **${firstName}** en cada respuesta (sin emojis) y mantén un tono profesional y amable. No hagas que parezca un interrogatorio, inicia cada pregunta con una frase diferente, agradeciendo al usuario, diciendo cosas diferentes, sin que en cada una digas "Claro ${firstName}", sino dándole variedad a la conversación.
@@ -308,25 +309,34 @@ async function generarResumenFinal(mensajeOriginal, datosJson, displayName) {
 }
 
 async function loginBMC() {
+    console.log('[BMC] Iniciando login JWT...');
     const resp = await axios.post(`${CFG.BMC_REST_URL}/api/jwt/login`,
         `username=${CFG.BMC_USERNAME}&password=${CFG.BMC_PASSWORD}`,
         { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
     );
+    console.log('[BMC] Login JWT exitoso.');
     return resp.data;
 }
 
 async function getIncidentData(incidentNumber) {
+    console.log(`[INC] Consultando incidente: ${incidentNumber}`);
     const jwt = await loginBMC();
     const headers = { Authorization: `AR-JWT ${jwt}`, Accept: 'application/json' };
     let qualification = `'Incident Number'="${incidentNumber}"`;
     let url = `${CFG.BMC_REST_URL}/api/arsys/v1/entry/HPD:Help Desk?q=${encodeURIComponent(qualification)}`;
     try {
         let resp = await axios.get(url, { headers });
-        return resp.data.entries[0]?.values || { Error: "No encontrado" };
-    } catch (e) { return { Error: e.message }; }
+        const result = resp.data.entries[0]?.values || { Error: "No encontrado" };
+        console.log(`[INC] Resultado para ${incidentNumber}:`, result.Error ? result.Error : 'OK');
+        return result;
+    } catch (e) {
+        console.error(`[INC] Error consultando ${incidentNumber}:`, e.message);
+        return { Error: e.message };
+    }
 }
 
 async function getWorkOrderData(woId) {
+    console.log(`[WO] Consultando requerimiento: ${woId}`);
     const jwt = await loginBMC();
     const headers = { Authorization: `AR-JWT ${jwt}`, Accept: 'application/json' };
     const form = 'WOI:WorkOrder';
@@ -334,8 +344,13 @@ async function getWorkOrderData(woId) {
     const url = `${CFG.BMC_REST_URL}/api/arsys/v1/entry/${encodeURIComponent(form)}?q=${encodeURIComponent(qualification)}`;
     try {
         const resp = await axios.get(url, { headers });
-        return resp.data.entries[0]?.values || { Error: "No encontrado" };
-    } catch (e) { return { Error: e.message }; }
+        const result = resp.data.entries[0]?.values || { Error: "No encontrado" };
+        console.log(`[WO] Resultado para ${woId}:`, result.Error ? result.Error : 'OK');
+        return result;
+    } catch (e) {
+        console.error(`[WO] Error consultando ${woId}:`, e.message);
+        return { Error: e.message };
+    }
 }
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -356,17 +371,23 @@ async function ejecutarResetUM(payloadObj) {
         user: String(payloadObj.user || "").trim()
     };
 
+    console.log(`[UM] Iniciando ${payload.action} para app: ${payload.sysapp}, empleado: ${payload.employnumber}`);
+    console.log(`[UM] Payload completo:`, JSON.stringify(payload));
+
     try {
         const headers = { Authorization: `Bearer ${CFG.UM_BEARER_TOKEN}`, 'Content-Type': 'application/json' };
         const postResp = await axios.post(`${baseUrl}${pathPost}`, payload, { headers });
+        console.log(`[UM] Respuesta POST setStarExecutionUM:`, JSON.stringify(postResp.data));
         const idExecution = postResp.data?.result?.idExecution;
 
         if (idExecution === undefined || idExecution === null) {
-            return { Error: "No se inició la ejecución", Detalle: postResp.data };
+            console.error(`[UM] No se obtuvo idExecution. Respuesta:`, JSON.stringify(postResp.data));
+            return { Error: "No se inici\u00f3 la ejecuci\u00f3n", Detalle: postResp.data };
         }
 
+        console.log(`[UM] idExecution obtenido: ${idExecution}. Iniciando polling...`);
         let attempts = 0;
-        const maxAttempts = 15; // Reducido para evitar el timeout de Cloud Run (aprox 4 min)
+        const maxAttempts = 15;
         const pollInterval = 15000;
 
         while (attempts < maxAttempts) {
@@ -375,10 +396,12 @@ async function ejecutarResetUM(payloadObj) {
 
             const getResp = await axios.get(`${baseUrl}${pathGet}?idExecution=${idExecution}`, { headers });
             const j = getResp.data;
+            console.log(`[UM] Poll #${attempts}/${maxAttempts} para idExecution=${idExecution}:`, JSON.stringify(j));
 
             if (j.status === "success" && j.result && j.result.execution) {
                 const exec = j.result.execution;
                 if (exec.status === "failed" || exec.status === "success") {
+                    console.log(`[UM] Resultado final: ${exec.status}, ticket: ${exec.incident || 'N/A'}`);
                     return {
                         status: exec.status,
                         incident: exec.incident,
@@ -387,8 +410,10 @@ async function ejecutarResetUM(payloadObj) {
                 }
             }
         }
-        return { Error: "Timeout", Detalle: "La operación tomó más de 5 minutos." };
+        console.error(`[UM] Timeout tras ${maxAttempts} intentos para idExecution=${idExecution}`);
+        return { Error: "Timeout", Detalle: "La operaci\u00f3n tom\u00f3 m\u00e1s de 5 minutos." };
     } catch (e) {
+        console.error(`[UM] Error en reseteo:`, e.response?.data || e.message);
         return { Error: "Fallo en Reseteo", Detalle: e.response?.data || e.message };
     }
 }
@@ -498,6 +523,7 @@ app.post('/api/chat', isAuth, async (req, res) => {
     try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${CFG.MODEL_ID}:generateContent?key=${CFG.GEMINI_API_KEY}`;
         const contents = history.concat([{ role: "user", parts: [{ text: message }] }]);
+        console.log(`[Gemini] Enviando mensaje del usuario (chatId: ${chatId}): "${message.substring(0, 100)}${message.length > 100 ? '...' : ''}"`);
 
         const payload = {
             system_instruction: getContextSophia(displayName || "Usuario"),
@@ -523,6 +549,7 @@ app.post('/api/chat', isAuth, async (req, res) => {
 
         if (part.functionCall) {
             const { name, args } = part.functionCall;
+            console.log(`[Tool] Gemini llamó a: ${name}`, JSON.stringify(args));
             let resultData;
 
             if (name === "consultar_ticket") {
@@ -533,6 +560,7 @@ app.post('/api/chat', isAuth, async (req, res) => {
                     const raw = await getIncidentData(normalizeIncidentId(args.ticket_id));
                     resultData = filtrarDatosRelevantes(raw);
                 }
+                console.log(`[Tool] Resultado consultar_ticket:`, JSON.stringify(resultData));
             } else if (name === "reset_contrasena_um") {
                 if (args.confirmado !== true && args.confirmado !== "true") {
                     resultData = { Error: "Debes presentar el resumen de datos al usuario y esperar su confirmación explícita antes de ejecutar esta acción." };
