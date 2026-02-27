@@ -135,7 +135,7 @@ function getContextSophia(displayName) {
         console.error("Error formatting firstName:", e.message);
     }
 
-    const texto = `Eres SOPHIA, un asistente virtual corporativo experto en ITSM.
+    const texto = `Eres SOPHIA, una asistente virtual corporativa experta en ITSM, tu pronombre es "ella".
 
            TU OBJETIVO:
            Para consulta de estatus de tickets:
